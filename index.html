@@ -51,6 +51,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md.links a{ font-weight:600; }
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
 .md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
+.tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
+.md li.bi .tchips{ font-weight:400; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
 .mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
@@ -665,7 +667,7 @@ function linkKind(u) {
   if (/sharepoint\.com|onedrive|1drv\.ms/i.test(u)) return ['file', 'Datei'];
   return ['', 'Link'];
 }
-function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="_blank" rel="noopener">' + k[1] + ' ↗</a>'; }).join(''); }
+function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="' + (k[0] === 'mail' ? 'outlook' : '_blank') + '" rel="noopener">' + k[1] + ' ↗</a>'; }).join(''); }
 function buddyUrl(text) {
   // Desktop: neue Cowork-Sitzung in der Claude-App mit Ordner AI-CoS (Buddy mit Dateizugriff); Handy: claude.ai
   const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
@@ -856,12 +858,13 @@ if (S.cockpit) {
     briefings: 'AI-CoS/knowledge/briefings',
     triage: 'AI-CoS/knowledge/cockpit/mail-triage.json',
     links: 'AI-CoS/knowledge/cockpit/links.md',
-    register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx'
+    register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx',
+    themen: 'AI-CoS/knowledge/cockpit/themen.json'
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -929,6 +932,8 @@ if (S.cockpit) {
   }
   async function loadLinks() {
     const f = await S.readPath(P.links); st.links = f ? f.text : null;
+    const th = await S.readPath(P.themen).catch(() => null);
+    try { st.themen = th && th.text ? JSON.parse(th.text) : null; } catch (e) { st.err.links = 'themen.json nicht lesbar'; }
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   async function loadAll() {
@@ -936,6 +941,36 @@ if (S.cockpit) {
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
+  }
+
+  // ---- Themen: Zuordnung per Stichwort (knowledge/cockpit/themen.json) ----
+  const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  function topicOf(text) {
+    if (!st.themen || !text) return null;
+    const t = ' ' + text.toLowerCase() + ' ';
+    let best = null, score = 0;
+    for (const th of st.themen.themes || []) {
+      let sc = 0;
+      for (const k of th.kw || []) {
+        const re = k.length <= 4 ? new RegExp('(^|[^a-z0-9äöüß])' + reEsc(k) + '([^a-z0-9äöüß]|$)') : null;
+        if (re ? re.test(t) : t.includes(k)) sc += k.length <= 4 ? 1 : 2;
+      }
+      if (sc > score) { score = sc; best = th; }
+    }
+    return best;
+  }
+  function claudeLink(path) {
+    const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+    return (mobile ? 'https://claude.ai/' : 'claude://claude.ai/') + path;
+  }
+  function topicChips(th, context) {
+    if (!th) return '';
+    const proj = st.themen && st.themen.buddyProject;
+    const sess = (th.sessions || []).map(n => '„' + n + '“').join(', ');
+    return '<div class="tchips"><span class="tth">Thema: <b>' + esc(th.title) + '</b></span>'
+      + (th.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + th.chat)) + '">Chat öffnen ↗</a>' : '')
+      + (sess && proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Sitzung ' + esc(sess) + ' ↗</a>' : '')
+      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '">Neu mit Buddy ↗</a></div>';
   }
 
   // ---- Verknuepfung Mail <-> Task ----
@@ -988,6 +1023,7 @@ if (S.cockpit) {
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
     d += '</section>';
     $('v-heute').innerHTML = '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
   function mailRow(m) {
     const tr = st.triage[m.internetMessageId] || {};
@@ -999,7 +1035,8 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
-      + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="_blank" rel="noopener">Outlook</a>'
+      + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.')
+      + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
   }
@@ -1043,7 +1080,12 @@ if (S.cockpit) {
     $('v-portfolio').innerHTML = h + '</section>';
   }
   function paintLinks() {
-    $('v-links').innerHTML = '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
+    const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
+      + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
+      + ((t.sessions || []).length ? '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '">Projekt Buddy ↗</a>' : '')
+      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '">Neu mit Buddy ↗</a></div>').join('') : '';
+    const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
+    $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, nimm diesen Link in die Cockpit-Linkliste auf: ')) + '" target="_blank" rel="noopener">Link aufnehmen lassen</a></div>'
       + (st.err.links ? '<div class="errbox">' + esc(st.err.links) + '</div>' : (st.links ? '<div class="md links">' + md(st.links.replace(/^#\s.*\n/, '')) + '</div>' : '<div class="empty">Noch keine Linkliste.</div>')) + '</section>';
   }
