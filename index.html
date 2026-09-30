@@ -475,7 +475,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 (function () {
   const CFG = window.TB_CONFIG || {};
   const G = 'https://graph.microsoft.com/v1.0';
-  const SCOPES = ['Files.ReadWrite', 'User.Read'];
+  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Calendars.Read'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send
   let app = null, account = null, item = null, backupCount = 0;
 
   async function token() {
@@ -930,7 +930,8 @@ if (S.cockpit) {
   function mailCat(m) {
     const c = (st.triage[m.internetMessageId] || {}).cat;
     if (c) return c;
-    return st.triageDate && Date.parse(m.receivedDateTime) < Date.parse(st.triageDate) ? 'old' : 'neu';
+    const cut = st.triageDate ? Date.parse(st.triageDate) : Date.now() - 24 * 3600e3;   // ohne Einordnung: nur letzte 24 h als neu
+    return Date.parse(m.receivedDateTime) < cut ? 'old' : 'neu';
   }
 
   // ---- Anzeige ----
@@ -998,7 +999,7 @@ if (S.cockpit) {
       return '<details class="mgroup g-' + k + '"' + (open ? ' open' : '') + ' data-g="' + k + '"><summary><span class="gt">' + title + '</span><span class="cnt2">' + g[k].length + '</span><span class="cs">' + sub + '</span></summary>' + rows
         + (g[k].length > n ? '<button class="more" data-more="' + k + '">Weitere ' + Math.min(PAGE, g[k].length - n) + ' von ' + (g[k].length - n) + ' anzeigen</button>' : '') + '</details>';
     };
-    const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet';
+    const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
     $('mlist').innerHTML = '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
@@ -1006,7 +1007,7 @@ if (S.cockpit) {
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
       + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
-      + sec('old', 'Älter', 'vor Buddys Einordnung, nicht bewertet', isOpen('old', !!q));
+      + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q));
   }
   function paintPortfolio() {
     if (!model) return;
@@ -1069,8 +1070,7 @@ if (S.cockpit) {
 
   $('title').textContent = 'Buddy Cockpit';
   document.title = 'Buddy Cockpit';
-  $('tabs').style.display = 'flex';
-  cockpitStart = () => { go(lsGet('cockpit-tab') || 'heute'); return loadAll(); };
+  cockpitStart = () => { $('tabs').style.display = 'flex'; go(lsGet('cockpit-tab') || 'heute'); return loadAll(); };
 }
 
 })();
