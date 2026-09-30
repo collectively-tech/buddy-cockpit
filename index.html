@@ -51,6 +51,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md.links a{ font-weight:600; }
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
 .md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
+.focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
 .mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
 .ev{ display:flex; gap:12px; padding:10px 16px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink); }
@@ -860,7 +861,7 @@ if (S.cockpit) {
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -1004,6 +1005,13 @@ if (S.cockpit) {
   }
   function paintMails() {
     if (st.err.mails) { $('v-mails').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '</div>'; return; }
+    if (st.focus) {
+      const fm = st.mails.filter(m => st.focus.ids.has(m.id));
+      $('mlist').innerHTML = '<div class="focusbar"><span><b>Zu Buddys Lage</b> · ' + esc(st.focus.label) + ' · ' + fm.length + ' Mail' + (fm.length > 1 ? 's' : '') + '</span><button id="btnAllMails">Alle Mails anzeigen</button></div>'
+        + '<div class="mgroup">' + fm.map(mailRow).join('') + '</div>';
+      $('btnAllMails').onclick = () => { st.focus = null; paintMails(); };
+      return;
+    }
     const q = st.mq.trim().toLowerCase();
     const list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
     const g = { needs: [], neu: [], waiting: [], info: [], old: [] };
@@ -1047,17 +1055,11 @@ if (S.cockpit) {
     const ids = new Set(Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key)).map(x => x.id));
     const hits = st.mails.filter(m => ids.has(m.internetMessageId));
     if (!hits.length) { toast('Zu Punkt ' + n + ' ist keine Mail im Posteingang verknüpft.'); return; }
-    st.mq = ''; $('mq').value = ''; go('mails');
-    // Gruppe öffnen und genug Zeilen anzeigen, damit die Treffer sichtbar sind
-    const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
-    const byCat = {}; st.mails.forEach(m => { const c = mailCat(m); (byCat[c] = byCat[c] || []).push(m); });
-    hits.forEach(m => { const c = mailCat(m); o[c] = true; const i = byCat[c].indexOf(m); if (i >= (st.shown[c] || PAGE)) st.shown[c] = i + 1; });
-    lsSet('cockpit-open', JSON.stringify(o));
-    paintMails();
-    const want = new Set(hits.map(m => m.id));
-    const els = [...document.querySelectorAll('.mail[data-mid]')].filter(el => want.has(el.dataset.mid));
-    els.forEach(el => el.classList.add('flash'));
-    if (els[0] && els[0].scrollIntoView) els[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    st.mq = ''; $('mq').value = '';
+    const li = document.querySelector('#v-heute li[data-bi="' + n + '"]');
+    st.focus = { ids: new Set(hits.map(m => m.id)), label: 'Punkt ' + n + ': ' + (li ? li.textContent.replace(/\s*↗\s*$/, '').slice(0, 90) : '') };
+    go('mails'); paintMails();
+    document.querySelectorAll('.mail[data-mid]').forEach(el => el.classList.add('flash'));
     setStatus(hits.length + ' Mail' + (hits.length > 1 ? 's' : '') + ' zu Punkt ' + n, 'ok');
   }
 
@@ -1084,10 +1086,10 @@ if (S.cockpit) {
     lsSet('cockpit-tab', tab); try { window.scrollTo(0, 0); } catch (e) { /* ohne Scroll */ }
   }
   $('tabs').innerHTML = TABS.map(([k, l]) => '<button data-tab="' + k + '">' + l + '</button>').join('') + '<span class="tsp"></span><button id="btnRefresh" class="rf" title="Alles neu laden">↻</button>';
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { if (b.dataset.tab === 'mails') st.focus = null; go(b.dataset.tab); if (b.dataset.tab === 'mails') paintMails(); } });
   $('btnRefresh').onclick = () => { setStatus('Lade …', 'warn'); loadAll().then(() => setStatus('Aktualisiert ' + new Date().toLocaleTimeString('de-CH'), 'ok')); busy = busy.then(reload).catch(() => {}); };
   $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
-  $('mq').addEventListener('input', () => { st.mq = $('mq').value; st.shown = {}; paintMails(); });
+  $('mq').addEventListener('input', () => { st.mq = $('mq').value; st.shown = {}; st.focus = null; paintMails(); });
   $('v-mails').addEventListener('toggle', e => { const d = e.target.closest && e.target.closest('details[data-g]'); if (!d) return;
     const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {}; o[d.dataset.g] = d.open; lsSet('cockpit-open', JSON.stringify(o)); }, true);
   document.addEventListener('click', e => {
