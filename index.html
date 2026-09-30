@@ -488,7 +488,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
   }
   const enc = p => p.split('/').map(encodeURIComponent).join('/');
   async function meta() {
-    const r = await g('GET', '/me/drive/root:/' + enc(CFG.path) + '?$select=id,eTag,parentReference,@microsoft.graph.downloadUrl');
+    const r = await g('GET', '/me/drive/root:/' + enc(CFG.path));   // ohne $select: sonst fehlt der Download-Link
     if (r.status === 404) throw new Error('board.md nicht gefunden unter OneDrive/' + CFG.path);
     if (!r.ok) throw new Error('OneDrive antwortet ' + r.status);
     item = await r.json(); return item;
@@ -522,6 +522,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
     },
     async read() {
       const m = await meta();
+      if (!m['@microsoft.graph.downloadUrl']) throw new Error('Kein Download-Link fuer board.md');
       const r = await fetch(m['@microsoft.graph.downloadUrl']);
       if (!r.ok) throw new Error('Download fehlgeschlagen (' + r.status + ')');
       return { text: await r.text(), etag: m.eTag };
@@ -569,10 +570,11 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       return out;
     },
     async readPath(path) {   // Datei auf OneDrive lesen, null wenn nicht vorhanden
-      const r = await g('GET', '/me/drive/root:/' + enc(path) + '?$select=id,webUrl,@microsoft.graph.downloadUrl');
+      const r = await g('GET', '/me/drive/root:/' + enc(path));   // ohne $select: sonst fehlt der Download-Link
       if (r.status === 404) return null;
       if (!r.ok) throw new Error('OneDrive antwortet ' + r.status);
       const m = await r.json();
+      if (!m['@microsoft.graph.downloadUrl']) throw new Error('Kein Download-Link fuer ' + path);
       const d = await fetch(m['@microsoft.graph.downloadUrl']);
       return { text: d.ok ? await d.text() : '', webUrl: m.webUrl };
     },
@@ -604,7 +606,7 @@ S.init(ui).then(async () => {
   await reload(); setInterval(poll, S.pollMs || 5000);
   if (cockpitStart) { await cockpitStart(); }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-}).catch(e => { $('connect').textContent = 'Fehler beim Verbinden: ' + e.message; });
+}).catch(e => { $('connect').style.display = ''; $('connect').innerHTML = '<b>Fehler beim Laden:</b> ' + esc(e.message) + ' <button onclick="location.reload()">Neu versuchen</button>'; });
 
 // ---------- Speichern: frisch lesen, Operation anwenden, sichern, bedingt schreiben, pruefen ----------
 function commit(op) {
