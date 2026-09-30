@@ -49,6 +49,9 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md h3{ font-size:15px; margin:12px 0 4px; } .md h4{ font-size:12px; margin:14px 0 4px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink3); }
 .md ol,.md ul{ margin:4px 0; padding-left:20px; } .md li{ margin:5px 0; } .md p{ margin:6px 0; } .md code{ font-size:12px; background:var(--holdbg); padding:1px 5px; border-radius:5px; }
 .md.links a{ font-weight:600; }
+.md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
+.md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
+.mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
 .ev{ display:flex; gap:12px; padding:10px 16px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink); }
 .ev:first-of-type{ border-top:none; } .ev:hover{ background:var(--acc2); } .ev.past{ opacity:.45; }
@@ -400,7 +403,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   root.TBCore = { parse, serialize, view, applyOp, keyOf, clean };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
-<script>window.TB_CONFIG = {"clientId": "e0623805-5ed8-4c9c-810f-89142a25bd02", "tenantId": "742d31f0-26eb-4f55-b84e-a6212d234a0e", "path": "AI-CoS/tasks/board.md"};</script>
+<script>window.TB_CONFIG = {"clientId": "e0623805-5ed8-4c9c-810f-89142a25bd02", "tenantId": "742d31f0-26eb-4f55-b84e-a6212d234a0e", "path": "AI-CoS/tasks/board.md", "coworkFolder": "/Users/chris/Library/CloudStorage/OneDrive-BHC/AI-CoS"};</script>
 <script>/*! @azure/msal-browser v3.30.0 2025-08-05 */
 "use strict";!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).msal={})}(this,(function(e){
 /*! @azure/msal-common v14.16.1 2025-08-05 */
@@ -662,8 +665,16 @@ function linkKind(u) {
   return ['', 'Link'];
 }
 function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="_blank" rel="noopener">' + k[1] + ' ↗</a>'; }).join(''); }
-function buddyUrl(text) { return 'https://claude.ai/new?q=' + encodeURIComponent(text); }
+function buddyUrl(text) {
+  // Desktop: neue Cowork-Sitzung in der Claude-App mit Ordner AI-CoS (Buddy mit Dateizugriff); Handy: claude.ai
+  const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+  if (mobile) return 'https://claude.ai/new?q=' + encodeURIComponent(text);
+  const folder = (window.TB_CONFIG && window.TB_CONFIG.coworkFolder) || '/Users/chris/Library/CloudStorage/OneDrive-BHC/AI-CoS';
+  return 'claude://cowork/new?q=' + encodeURIComponent(text) + '&folder=' + encodeURIComponent(folder);
+}
 function taskPrompt(l) { return 'Buddy, lass uns diesen Task bearbeiten: „' + l.title + '“.' + (field(l, 'due') ? ' Frist ' + field(l, 'due') + '.' : '') + (field(l, 'note') ? ' Stand: ' + field(l, 'note').slice(0, 600) : '') + (linksOf(l).length ? ' Verknüpft: ' + linksOf(l).join(' ') : '') + ' Quelle: tasks/board.md. Was schlägst du vor?'; }
+// claude://-Links direkt an die Desktop-App geben (kein leerer Browser-Tab)
+document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('a[href^="claude://"]'); if (!a) return; e.preventDefault(); window.location.href = a.href; }, true);
 function tagsOf(t) { return field(t, 'tags').split(',').map(s => s.trim()).filter(Boolean); }
 function matches(t, q) { if (!q) return true; return (t.title + ' ' + field(t, 'note') + ' ' + field(t, 'tags')).toLowerCase().includes(q); }
 
@@ -863,14 +874,16 @@ if (S.cockpit) {
       .replace(/`([^`]+)`/g, '<code>$1</code>')
       .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
   }
-  function md(text) {
-    const out = []; let list = null;
+  function md(text, clickable) {
+    const out = []; let list = null, sec = '';
     const close = () => { if (list) { out.push('</' + list + '>'); list = null; } };
     for (const raw of text.split('\n')) {
       const l = raw.replace(/\s+$/, ''); let m;
       if (!l.trim()) { close(); continue; }
-      if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { close(); const h = Math.min(6, m[1].length + 2); out.push('<h' + h + '>' + inline(m[2]) + '</h' + h + '>'); continue; }
-      if ((m = l.match(/^\s*(\d+)\.\s+(.*)$/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li value="' + m[1] + '">' + inline(m[2]) + '</li>'); continue; }
+      if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { close(); sec = m[2]; const h = Math.min(6, m[1].length + 2); out.push('<h' + h + '>' + inline(m[2]) + '</h' + h + '>'); continue; }
+      if ((m = l.match(/^\s*(\d+)\.\s+(.*)$/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; }
+        const bi = clickable && /^Braucht dich/i.test(sec) ? ' class="bi" data-bi="' + m[1] + '" title="Zur Mail springen"' : '';
+        out.push('<li value="' + m[1] + '"' + bi + '>' + inline(m[2]) + '</li>'); continue; }
       if ((m = l.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
       close(); out.push('<p>' + inline(l) + '</p>');
     }
@@ -956,9 +969,9 @@ if (S.cockpit) {
   }
   function paintHeute() {
     const t = today();
-    let b = '<section class="card"><div class="ch"><h2>Buddys Lage</h2><span class="cs">' + (st.briefDate ? (st.briefDate === t ? 'heute' : 'Stand ' + fmtDue(st.briefDate) + ' · heutige Lage fehlt noch') : '') + '</span>'
+    let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">von Buddy</span><span class="cs">' + (st.briefDate ? (st.briefDate === t ? 'heute' : 'Stand ' + fmtDue(st.briefDate) + ' · heutige Lage fehlt noch') : '') + '</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (st.briefDate || t) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
-    b += st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
+    b += st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
     let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
     if (st.err.cal) c += '<div class="errbox">Kalender nicht lesbar: ' + esc(st.err.cal) + '</div>';
@@ -980,7 +993,7 @@ if (S.cockpit) {
     const when = new Date(m.receivedDateTime);
     const w = when.toDateString() === new Date().toDateString() ? when.toTimeString().slice(0, 5) : when.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: '2-digit' });
     const linked = tasksForMail(m);
-    return '<div class="mail' + (m.isRead ? '' : ' unread') + '">'
+    return '<div class="mail' + (m.isRead ? '' : ' unread') + '" data-mid="' + esc(m.id) + '">'
       + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + w + '</span></div>'
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
@@ -1028,6 +1041,26 @@ if (S.cockpit) {
   }
   function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); paintLinks(); }
 
+  // ---- Lage-Punkt -> zugehoerige Mails (Buddy verknuepft in mail-triage.json per "brief": "JJJJ-MM-TT#N") ----
+  function jumpToBrief(n) {
+    const key = st.briefDate + '#' + n;
+    const ids = new Set(Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key)).map(x => x.id));
+    const hits = st.mails.filter(m => ids.has(m.internetMessageId));
+    if (!hits.length) { toast('Zu Punkt ' + n + ' ist keine Mail im Posteingang verknüpft.'); return; }
+    st.mq = ''; $('mq').value = ''; go('mails');
+    // Gruppe öffnen und genug Zeilen anzeigen, damit die Treffer sichtbar sind
+    const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
+    const byCat = {}; st.mails.forEach(m => { const c = mailCat(m); (byCat[c] = byCat[c] || []).push(m); });
+    hits.forEach(m => { const c = mailCat(m); o[c] = true; const i = byCat[c].indexOf(m); if (i >= (st.shown[c] || PAGE)) st.shown[c] = i + 1; });
+    lsSet('cockpit-open', JSON.stringify(o));
+    paintMails();
+    const want = new Set(hits.map(m => m.id));
+    const els = [...document.querySelectorAll('.mail[data-mid]')].filter(el => want.has(el.dataset.mid));
+    els.forEach(el => el.classList.add('flash'));
+    if (els[0] && els[0].scrollIntoView) els[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setStatus(hits.length + ' Mail' + (hits.length > 1 ? 's' : '') + ' zu Punkt ' + n, 'ok');
+  }
+
   // ---- Mail an bestehenden Task haengen ----
   function attachDialog(m) {
     const all = C.view(model).flatMap(p => p.visible.map(t => ({ t, p })));
@@ -1064,6 +1097,7 @@ if (S.cockpit) {
       openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
       return; }
     const ma = e.target.closest('[data-mattach]'); if (ma) { const m = st.mails.find(x => x.id === ma.dataset.mattach); if (m) attachDialog(m); return; }
+    const bi = e.target.closest('[data-bi]'); if (bi && !e.target.closest('a')) { jumpToBrief(bi.dataset.bi); return; }
     const po = e.target.closest('[data-open]'); if (po && !e.target.closest('#grid')) { openTask(po.dataset.open); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAll(); });
