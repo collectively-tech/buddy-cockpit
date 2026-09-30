@@ -53,6 +53,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi .tchips{ font-weight:400; }
+.sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; } .prow.sug button{ font-size:12px; padding:5px 10px; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
 .mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
@@ -584,6 +585,11 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       const d = await fetch(m['@microsoft.graph.downloadUrl']);
       return { text: d.ok ? await d.text() : '', webUrl: m.webUrl };
     },
+    async writePath(path, text) {   // kleine Cockpit-Datei schreiben (z. B. decisions.json)
+      const r = await g('PUT', '/me/drive/root:/' + enc(path) + ':/content', text, { 'Content-Type': 'application/json; charset=utf-8' });
+      if (!r.ok) throw new Error('Schreiben fehlgeschlagen (' + r.status + ')');
+      return true;
+    },
     async metaPath(path) {
       const r = await g('GET', '/me/drive/root:/' + enc(path) + '?$select=id,webUrl,name');
       return r.ok ? r.json() : null;
@@ -859,12 +865,13 @@ if (S.cockpit) {
     triage: 'AI-CoS/knowledge/cockpit/mail-triage.json',
     links: 'AI-CoS/knowledge/cockpit/links.md',
     register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx',
-    themen: 'AI-CoS/knowledge/cockpit/themen.json'
+    themen: 'AI-CoS/knowledge/cockpit/themen.json',
+    decisions: 'AI-CoS/knowledge/cockpit/decisions.json'
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {} };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -924,9 +931,11 @@ if (S.cockpit) {
     ]);
     st.inbox = box; st.mails = all;
     st.triage = {}; st.triageDate = null;
+    const df = await S.readPath(P.decisions).catch(() => null);
+    try { st.dec = df && df.text ? (JSON.parse(df.text).items || {}) : {}; } catch (e) { st.dec = {}; }
     const f = await S.readPath(P.triage).catch(() => null);
     if (f && f.text) {
-      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); }
+      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; }
       catch (e) { st.err.triage = 'mail-triage.json nicht lesbar'; }
     }
   }
@@ -1022,7 +1031,19 @@ if (S.cockpit) {
     d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
     d += '</section>';
-    $('v-heute').innerHTML = '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+    const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id]);
+    let v = '';
+    if (ps.length || ph.length) {
+      v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · nichts passiert ohne deinen Klick</span></div>'
+        + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
+          + (x.link ? '<a class="chip mail" href="' + esc(x.link) + '" target="outlook">Mail ↗</a>' : '')
+          + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button></div>').join('')
+        + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span>'
+          + (x.evidence && /^https?:/.test(x.evidence) ? '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>' : '')
+          + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button></div>').join('')
+        + '</section>';
+    }
+    $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
   function mailRow(m) {
@@ -1037,6 +1058,7 @@ if (S.cockpit) {
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
       + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.')
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
+      + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
   }
@@ -1104,6 +1126,37 @@ if (S.cockpit) {
     document.querySelectorAll('.mail[data-mid]').forEach(el => el.classList.add('flash'));
     setStatus(hits.length + ' Mail' + (hits.length > 1 ? 's' : '') + ' zu Punkt ' + n, 'ok');
   }
+
+  // ---- Vorschläge übernehmen / verwerfen (Entscheid in decisions.json, damit Buddy nicht doppelt vorschlägt) ----
+  async function decide(id, status) {
+    st.dec[id] = { status, at: new Date().toISOString() };
+    try {
+      const cur = await S.readPath(P.decisions).catch(() => null);
+      let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
+      d.note = 'Entscheide von Chris zu Buddys Cockpit-Vorschlägen. Schreibt das Cockpit, liest der Morgenlauf.';
+      d.items = Object.assign(d.items || {}, { [id]: st.dec[id] });
+      await S.writePath(P.decisions, JSON.stringify(d, null, 1));
+    } catch (e) { setStatus('Entscheid nicht gespeichert: ' + e.message, 'err'); }
+    paintHeute();
+  }
+  function findTaskByTitle(title) {
+    const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
+    return t ? C.keyOf(model, t.idx) : null;
+  }
+  document.addEventListener('click', async e => {
+    const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]');
+    if (!(sa || sr || ha || hr)) return;
+    if (sa) { const x = st.sug.find(y => y.id === sa.dataset.sacc); if (!x) return;
+      const panels = C.view(model).map(p => p.name); const panel = panels.includes(x.panel) ? x.panel : panels[0];
+      const okay = await commit({ type: 'add', panel, title: x.title, due: x.due || '', note: x.note || x.why || '', link: x.link || '' });
+      if (okay) { toast('Task übernommen: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } return; }
+    if (sr) { decide(sr.dataset.srej, 'rejected'); return; }
+    if (ha) { const x = st.hyg.find(y => y.id === ha.dataset.hacc); if (!x) return; const key = findTaskByTitle(x.title);
+      if (!key) { toast('Task nicht mehr im Board gefunden (inzwischen geändert?)'); return; }
+      const okay = x.action === 'done' ? await commit({ type: 'status', key, status: 'done' }) : await commit({ type: 'edit', key, due: x.due || '' });
+      if (okay) decide(x.id, 'accepted'); return; }
+    if (hr) { decide(hr.dataset.hrej, 'rejected'); }
+  });
 
   // ---- Mail an bestehenden Task haengen ----
   function attachDialog(m) {
