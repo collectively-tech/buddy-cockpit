@@ -77,6 +77,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .mt{ display:flex; gap:10px; } .mf{ flex:1; font-size:13px; } .mw{ font-size:12px; color:var(--ink3); }
 .ms{ font-size:13.5px; margin-top:1px; } .mp{ font-size:12.5px; color:var(--ink2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .mwhy{ font-size:12.5px; color:var(--acc); margin-top:3px; } .mwhy::before{ content:"Buddy: "; font-weight:700; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -482,7 +483,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 (function () {
   const CFG = window.TB_CONFIG || {};
   const G = 'https://graph.microsoft.com/v1.0';
-  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Calendars.Read'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send
+  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Mail.ReadWrite', 'Calendars.Read'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send (Senden technisch unmöglich)
   let app = null, account = null, item = null, backupCount = 0;
 
   async function token() {
@@ -589,6 +590,12 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       const r = await g('PUT', '/me/drive/root:/' + enc(path) + ':/content', text, { 'Content-Type': 'application/json; charset=utf-8' });
       if (!r.ok) throw new Error('Schreiben fehlgeschlagen (' + r.status + ')');
       return true;
+    },
+    async createReplyDraft(messageId, text) {   // EINZIGER Schreibzugriff aufs Postfach: Antwort-Entwurf anlegen. Kein Senden, Löschen, Verschieben im Code.
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: text }), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
+      const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
     async metaPath(path) {
       const r = await g('GET', '/me/drive/root:/' + enc(path) + '?$select=id,webUrl,name');
@@ -1046,6 +1053,7 @@ if (S.cockpit) {
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
+  const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
   function mailRow(m) {
     const tr = st.triage[m.internetMessageId] || {};
     const when = new Date(m.receivedDateTime);
@@ -1056,9 +1064,12 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
+      + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
+        + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span>' : '') + '</details>' : '')
       + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.')
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
       + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>' : '')
+      + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
   }
@@ -1128,8 +1139,8 @@ if (S.cockpit) {
   }
 
   // ---- Vorschläge übernehmen / verwerfen (Entscheid in decisions.json, damit Buddy nicht doppelt vorschlägt) ----
-  async function decide(id, status) {
-    st.dec[id] = { status, at: new Date().toISOString() };
+  async function decide(id, status, extra) {
+    st.dec[id] = Object.assign({ status, at: new Date().toISOString() }, extra || {});
     try {
       const cur = await S.readPath(P.decisions).catch(() => null);
       let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
@@ -1143,6 +1154,17 @@ if (S.cockpit) {
     const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
     return t ? C.keyOf(model, t.idx) : null;
   }
+  document.addEventListener('click', async e => {
+    const md = e.target.closest('[data-mdraft]'); if (!md) return;
+    const m = st.mails.find(x => x.id === md.dataset.mdraft); if (!m) return;
+    const tr = st.triage[m.internetMessageId] || {}; if (!tr.draftText) return;
+    md.disabled = true; md.textContent = 'Lege Entwurf an …';
+    try {
+      const d = await S.createReplyDraft(m.id, tr.draftText);
+      await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
+      toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails();
+    } catch (err) { md.disabled = false; md.textContent = 'Als Entwurf in Outlook anlegen'; setStatus(err.message, 'err'); }
+  });
   document.addEventListener('click', async e => {
     const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]');
     if (!(sa || sr || ha || hr)) return;
