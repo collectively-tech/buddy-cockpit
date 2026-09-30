@@ -1,6 +1,6 @@
 {
- "name": "Buddy Taskboard",
- "short_name": "Buddy Board",
+ "name": "Buddy Cockpit",
+ "short_name": "Cockpit",
  "start_url": "./",
  "scope": "./",
  "display": "standalone",

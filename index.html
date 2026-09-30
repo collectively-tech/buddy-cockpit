@@ -3,92 +3,159 @@
 <title>CoS · Task-Board</title>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Buddy Board">
+<meta name="apple-mobile-web-app-title" content="Cockpit">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="theme-color" content="#f5f6f8">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <style>
-:root { color-scheme: light; } *{ box-sizing:border-box; } html,body{ margin:0; padding:0; }
-body{ font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:#f5f6f8; color:#1b2430; -webkit-font-smoothing:antialiased; padding:18px 18px 60px; }
-h1{ font-size:19px; margin:0; font-weight:700; }
-.sub{ color:#6b7280; font-size:12.5px; margin-top:3px; }
-.bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:12px 0 16px; }
-.bar input[type=search]{ font:inherit; font-size:13px; padding:6px 10px; border:1px solid #d5d9e0; border-radius:8px; min-width:220px; }
-button{ font:inherit; font-size:12.5px; border:1px solid #d5d9e0; background:#fff; border-radius:8px; padding:6px 11px; cursor:pointer; color:#1b2430; }
-button:hover{ background:#f0f2f5; } button.primary{ background:#2563eb; color:#fff; border-color:#2563eb; } button.primary:hover{ background:#1d4ed8; }
-button.danger{ color:#b42318; } button.on{ background:#1b2430; color:#fff; border-color:#1b2430; }
-.status{ font-size:12px; color:#6b7280; margin-left:auto; }
-.status.ok::before{ content:"●"; color:#16a34a; margin-right:5px; } .status.warn::before{ content:"●"; color:#d97706; margin-right:5px; } .status.err::before{ content:"●"; color:#dc2626; margin-right:5px; }
-.connect{ background:#eef4ff; border:1px solid #cfe0fb; color:#274b8f; font-size:13px; border-radius:10px; padding:16px; margin:12px 0; line-height:1.5; }
-.grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; align-items:start; }
-.panel{ background:#fff; border-radius:12px; box-shadow:0 1px 2px rgba(20,25,35,.08); overflow:hidden; }
+:root{ color-scheme:light dark;
+  --bg:#f4f5f7; --card:#ffffff; --ink:#111827; --ink2:#4b5563; --ink3:#8b93a1; --line:#eceef2; --line2:#d9dde4;
+  --acc:#2563eb; --acc2:#eef3ff; --hot:#dc2626; --hotbg:#fee2e2; --warm:#b45309; --warmbg:#fef3c7; --ok:#16a34a;
+  --tagc:#3f51b5; --tagbg:#eaedfb; --holdbg:#eceef2; --shadow:0 1px 2px rgba(16,24,40,.06),0 1px 3px rgba(16,24,40,.05); }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0d1117; --card:#161b22; --ink:#e6edf3; --ink2:#a9b4c2; --ink3:#7d8794; --line:#222a33; --line2:#30363d;
+  --acc:#4c8dff; --acc2:#15233d; --hot:#f87171; --hotbg:#3b1717; --warm:#fbbf24; --warmbg:#3a2a0b;
+  --tagc:#a5b4fc; --tagbg:#1e2340; --holdbg:#222a33; --shadow:0 1px 2px rgba(0,0,0,.4); } }
+*{ box-sizing:border-box; } html,body{ margin:0; padding:0; }
+body{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif; background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; padding:18px 22px 60px; max-width:1500px; margin:0 auto; }
+a{ color:var(--acc); }
+.top{ display:flex; align-items:baseline; gap:12px; flex-wrap:wrap; }
+h1{ font-size:20px; margin:0; font-weight:750; letter-spacing:-.02em; }
+.sub{ color:var(--ink3); font-size:12px; margin-top:2px; }
+.status{ font-size:12px; color:var(--ink3); margin-left:auto; }
+.status.ok::before{ content:"●"; color:var(--ok); margin-right:5px; } .status.warn::before{ content:"●"; color:#d97706; margin-right:5px; } .status.err::before{ content:"●"; color:var(--hot); margin-right:5px; }
+button,.btn{ font:inherit; font-size:12.5px; border:1px solid var(--line2); background:var(--card); border-radius:8px; padding:6px 11px; cursor:pointer; color:var(--ink); text-decoration:none; display:inline-flex; align-items:center; gap:5px; white-space:nowrap; }
+button:hover,.btn:hover{ border-color:var(--ink3); } button.primary{ background:var(--acc); color:#fff; border-color:var(--acc); }
+button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(--bg); border-color:var(--ink); }
+.btn.ghost{ border-color:transparent; background:var(--acc2); color:var(--acc); }
+.connect{ background:var(--acc2); border:1px solid var(--line2); color:var(--ink); font-size:13px; border-radius:12px; padding:16px; margin:14px 0; line-height:1.5; }
+/* Reiter + Kennzahlen */
+.tabs{ display:flex; gap:4px; margin:14px 0 12px; padding:4px; background:var(--card); border:1px solid var(--line); border-radius:12px; box-shadow:var(--shadow); position:sticky; top:8px; z-index:5; overflow-x:auto; }
+.tabs button{ border:none; background:transparent; padding:8px 14px; border-radius:9px; font-weight:600; color:var(--ink2); }
+.tabs button.on{ background:var(--ink); color:var(--bg); } .tabs .tsp{ flex:1; } .tabs .rf{ font-size:16px; padding:6px 12px; }
+.kpis{ display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:14px; }
+.kpi{ display:flex; flex-direction:column; align-items:flex-start; gap:2px; padding:14px 16px; border-radius:14px; background:var(--card); border:1px solid var(--line); box-shadow:var(--shadow); text-align:left; white-space:normal; }
+.kpi .kl{ font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink3); }
+.kpi .kv{ font-size:24px; font-weight:750; letter-spacing:-.02em; } .kpi .ks{ font-size:12px; color:var(--ink2); }
+.kpi.hot{ border-color:var(--hot); } .kpi.hot .kv{ color:var(--hot); } .kpi.warm .kv{ color:var(--warm); }
+/* Karten */
+.cols{ display:grid; grid-template-columns:minmax(0,1.35fr) minmax(0,1fr); gap:14px; align-items:start; }
+.stack{ display:flex; flex-direction:column; gap:14px; }
+.card{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
+.ch{ display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.ch h2{ font-size:14px; margin:0; font-weight:700; } .cs{ font-size:12px; color:var(--ink3); flex:1; }
+.md{ padding:6px 16px 14px; font-size:13.5px; line-height:1.5; }
+.md h3{ font-size:15px; margin:12px 0 4px; } .md h4{ font-size:12px; margin:14px 0 4px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink3); }
+.md ol,.md ul{ margin:4px 0; padding-left:20px; } .md li{ margin:5px 0; } .md p{ margin:6px 0; } .md code{ font-size:12px; background:var(--holdbg); padding:1px 5px; border-radius:5px; }
+.md.links a{ font-weight:600; }
+.empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
+.ev{ display:flex; gap:12px; padding:10px 16px; border-top:1px solid var(--line); text-decoration:none; color:var(--ink); }
+.ev:first-of-type{ border-top:none; } .ev:hover{ background:var(--acc2); } .ev.past{ opacity:.45; }
+.et{ font-weight:700; font-size:13px; min-width:52px; display:flex; flex-direction:column; } .et small{ font-weight:500; color:var(--ink3); font-size:11.5px; }
+.eb{ display:flex; flex-direction:column; min-width:0; } .es{ font-size:13.5px; font-weight:500; } .el{ font-size:12px; color:var(--ink3); }
+.prow{ display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--line); cursor:pointer; }
+.prow:hover{ background:var(--acc2); } .pn{ font-size:12px; color:var(--ink3); font-weight:700; min-width:28px; } .pt{ flex:1; font-size:13.5px; min-width:0; }
+.pt small{ display:block; font-size:11.5px; color:var(--ink3); }
+/* Mails */
+.msearch{ display:flex; gap:8px; margin-bottom:10px; } .msearch input{ flex:1; font:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--line2); border-radius:10px; background:var(--card); color:var(--ink); }
+.mhint{ font-size:12px; color:var(--ink3); margin:0 2px 10px; }
+.mgroup{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); margin-bottom:12px; overflow:hidden; }
+.mgroup summary{ display:flex; align-items:center; gap:10px; padding:12px 16px; cursor:pointer; list-style:none; }
+.mgroup summary::-webkit-details-marker{ display:none; } .mgroup summary::before{ content:"▸"; color:var(--ink3); } .mgroup[open] summary::before{ content:"▾"; }
+.gt{ font-weight:700; font-size:14px; } .cnt2{ font-size:11px; font-weight:700; background:var(--holdbg); border-radius:20px; padding:1px 8px; }
+.g-needs .cnt2{ background:var(--hot); color:#fff; } .g-neu .cnt2{ background:var(--acc); color:#fff; }
+.mail{ padding:11px 16px; border-top:1px solid var(--line); }
+.mail.unread .mf,.mail.unread .ms{ font-weight:700; } .mail.unread{ box-shadow:inset 3px 0 0 var(--acc); }
+.mt{ display:flex; gap:10px; } .mf{ flex:1; font-size:13px; } .mw{ font-size:12px; color:var(--ink3); }
+.ms{ font-size:13.5px; margin-top:1px; } .mp{ font-size:12.5px; color:var(--ink2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.mwhy{ font-size:12.5px; color:var(--acc); margin-top:3px; } .mwhy::before{ content:"Buddy: "; font-weight:700; }
+.ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
+.tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
+.more{ margin:8px 16px 12px; }
+/* Taskboard */
+.bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:0 0 14px; }
+.bar input[type=search]{ font:inherit; font-size:13px; padding:7px 11px; border:1px solid var(--line2); border-radius:9px; min-width:240px; background:var(--card); color:var(--ink); }
+.grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(290px,1fr)); gap:14px; align-items:start; }
+.panel{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
 .panel.dropP{ outline:2px dashed var(--c); }
-.head{ display:flex; align-items:center; gap:8px; padding:11px 13px 10px; border-top:3px solid var(--c); cursor:grab; }
+.head{ display:flex; align-items:center; gap:8px; padding:12px 14px 10px; border-top:3px solid var(--c); cursor:grab; }
 .head .name{ font-size:13.5px; font-weight:700; flex:1; }
 .head .cnt{ font-size:11px; font-weight:700; color:#fff; background:var(--c); border-radius:20px; padding:1px 8px; }
-.head .pm{ border:none; background:none; padding:0 4px; color:#8a909a; font-size:16px; line-height:1; }
-.task{ display:flex; gap:9px; padding:9px 13px; border-top:1px solid #f0f1f4; cursor:pointer; position:relative; }
-.task:hover{ background:#fafbfc; }
+.head .pm{ border:none; background:none; padding:0 4px; color:var(--ink3); font-size:16px; line-height:1; }
+.task{ display:flex; gap:10px; padding:10px 14px; border-top:1px solid var(--line); cursor:pointer; position:relative; }
+.task:hover{ background:var(--acc2); }
 .task.drop::before{ content:""; position:absolute; left:8px; right:8px; top:-2px; height:3px; background:var(--c); border-radius:2px; }
 .task.dragging{ opacity:.35; }
-.chk{ width:17px; height:17px; border:1.5px solid #c4cad2; border-radius:50%; margin-top:1px; flex:0 0 auto; background:#fff; cursor:pointer; padding:0; }
-.chk:hover{ border-color:#16a34a; background:#dcfce7; }
+.chk{ width:18px; height:18px; border:1.5px solid var(--line2); border-radius:50%; margin-top:1px; flex:0 0 auto; background:var(--card); cursor:pointer; padding:0; }
+.chk:hover{ border-color:var(--ok); background:#dcfce7; }
 .body{ min-width:0; flex:1; }
-.t{ font-size:13px; line-height:1.32; font-weight:500; word-break:break-word; }
-.n{ font-size:11.5px; color:#7b8494; margin-top:3px; line-height:1.3; word-break:break-word; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
-.meta{ margin-top:5px; display:flex; gap:5px; flex-wrap:wrap; }
-.tag{ font-size:10px; font-weight:700; color:#3f5bd6; background:#eaeefb; border-radius:5px; padding:1px 6px; }
-.due{ font-size:10px; font-weight:700; color:#b42318; background:#fde2e2; border-radius:5px; padding:1px 6px; }
-.hold{ font-size:10px; font-weight:700; color:#5b6472; background:#e7e9ee; border-radius:5px; padding:1px 6px; }
-.task.paused{ opacity:.72; }
+.t{ font-size:13px; line-height:1.35; font-weight:550; word-break:break-word; }
+.n{ font-size:11.5px; color:var(--ink3); margin-top:3px; line-height:1.35; word-break:break-word; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+.meta{ margin-top:6px; display:flex; gap:5px; flex-wrap:wrap; align-items:center; }
+.tag{ font-size:10px; font-weight:700; color:var(--tagc); background:var(--tagbg); border-radius:5px; padding:1px 6px; }
+.due{ font-size:10.5px; font-weight:700; color:var(--warm); background:var(--warmbg); border-radius:5px; padding:1px 6px; white-space:nowrap; }
+.due.over{ color:var(--hot); background:var(--hotbg); }
+.hold{ font-size:10px; font-weight:700; color:var(--ink2); background:var(--holdbg); border-radius:5px; padding:1px 6px; }
+.chip{ font-size:10.5px; font-weight:700; border-radius:20px; padding:1px 8px; text-decoration:none; background:var(--acc2); color:var(--acc); white-space:nowrap; }
+.chip.mail{ background:#e0f2fe; color:#0369a1; } .chip.chat{ background:#fdf0e7; color:#c2410c; } .chip.file{ background:#ecfdf3; color:#15803d; }
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .chip.mail{ background:#0c2a3d; color:#7dd3fc; } :root:not([data-theme="light"]) .chip.chat{ background:#3a1e0e; color:#fdba74; } :root:not([data-theme="light"]) .chip.file{ background:#0e2a19; color:#86efac; } }
+.task.paused{ opacity:.7; }
 .task.arch{ opacity:.55; cursor:default; } .task.arch .t{ text-decoration:line-through; }
-.addrow{ border-top:1px solid #f0f1f4; padding:7px 13px; min-height:36px; }
-.addrow input{ width:100%; font:inherit; font-size:12.5px; border:1px dashed #d5d9e0; border-radius:7px; padding:6px 8px; background:#fcfcfd; }
-.archhead{ font-size:10.5px; font-weight:700; color:#8a909a; text-transform:uppercase; letter-spacing:.04em; padding:8px 13px 4px; border-top:1px solid #f0f1f4; }
+.addrow{ border-top:1px solid var(--line); padding:8px 14px; min-height:36px; }
+.addrow input{ width:100%; font:inherit; font-size:12.5px; border:1px dashed var(--line2); border-radius:8px; padding:7px 9px; background:transparent; color:var(--ink); }
+.archhead{ font-size:10.5px; font-weight:700; color:var(--ink3); text-transform:uppercase; letter-spacing:.05em; padding:8px 14px 4px; border-top:1px solid var(--line); }
 .re{ font-size:11px; padding:3px 8px; }
-dialog{ border:none; border-radius:14px; padding:0; width:min(620px,94vw); box-shadow:0 20px 50px rgba(0,0,0,.25); }
-dialog::backdrop{ background:rgba(20,25,35,.35); }
-.dlg{ padding:18px 20px; } .dlg h2{ font-size:15px; margin:0 0 12px; }
-.dlg label{ display:block; font-size:11.5px; font-weight:600; color:#5b6472; margin:10px 0 4px; }
-.dlg input,.dlg textarea,.dlg select{ width:100%; font:inherit; font-size:13px; padding:7px 9px; border:1px solid #d5d9e0; border-radius:8px; }
-.dlg textarea{ min-height:170px; resize:vertical; line-height:1.4; }
+/* Dialoge */
+dialog{ border:1px solid var(--line); border-radius:16px; padding:0; width:min(640px,94vw); box-shadow:0 24px 60px rgba(0,0,0,.3); background:var(--card); color:var(--ink); }
+dialog::backdrop{ background:rgba(10,14,20,.45); }
+.dlg{ padding:18px 20px; } .dlg h2{ font-size:16px; margin:0 0 12px; }
+.dlg label{ display:block; font-size:11.5px; font-weight:650; color:var(--ink2); margin:10px 0 4px; }
+.dlg input,.dlg textarea,.dlg select{ width:100%; font:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--line2); border-radius:9px; background:var(--bg); color:var(--ink); }
+.dlg textarea{ min-height:150px; resize:vertical; line-height:1.4; } #eLinks{ min-height:64px; font-size:12px; }
 .row2{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px; }
-.acts{ display:flex; gap:8px; margin-top:16px; } .acts .sp{ flex:1; }
-.toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:#1b2430; color:#fff; font-size:13px; padding:10px 14px; border-radius:10px; display:none; gap:12px; align-items:center; z-index:9; max-width:90vw; }
+.acts{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; } .acts .sp{ flex:1; }
+.lhint{ font-size:11.5px; color:var(--ink3); margin-top:4px; }
+.toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--ink); color:var(--bg); font-size:13px; padding:10px 14px; border-radius:10px; display:none; gap:12px; align-items:center; z-index:9; max-width:90vw; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
-.foot{ margin-top:18px; color:#8a909a; font-size:11.5px; line-height:1.5; }
+.foot{ margin-top:18px; color:var(--ink3); font-size:11.5px; line-height:1.5; }
 .mv{ display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+@media (max-width:900px){ .cols{ grid-template-columns:1fr; } .kpis{ grid-template-columns:repeat(2,1fr); } }
 @media (max-width:700px){
-  body{ padding:12px 10px 70px; padding-top:max(12px, env(safe-area-inset-top)); }
-  .sub{ font-size:12px; }
+  body{ padding:12px 12px 70px; padding-top:max(12px, env(safe-area-inset-top)); }
   .grid{ grid-template-columns:1fr; gap:12px; }
-  .bar input[type=search]{ flex:1 1 100%; min-width:0; font-size:16px; }
-  .bar button{ padding:8px 12px; }
+  .bar input[type=search]{ flex:1 1 100%; min-width:0; font-size:16px; } .msearch input{ font-size:16px; }
   .status{ flex:1 1 100%; margin-left:0; }
-  .task{ padding:12px 13px; } .t{ font-size:14.5px; } .n{ font-size:12.5px; }
+  .kpi{ padding:11px 12px; } .kpi .kv{ font-size:20px; }
+  .task{ padding:12px 14px; } .t{ font-size:14.5px; } .n{ font-size:12.5px; }
   .chk{ width:24px; height:24px; }
   .head{ padding:13px; } .head .pm{ font-size:22px; padding:0 8px; }
   .addrow input{ font-size:16px; padding:9px; }
   .row2{ grid-template-columns:1fr; gap:0; }
   .dlg input,.dlg textarea,.dlg select{ font-size:16px; }
-  dialog{ width:100vw; max-width:100vw; max-height:92vh; margin:auto auto 0; border-radius:14px 14px 0 0; }
+  .ma button,.ma .btn{ padding:8px 12px; font-size:13px; }
+  dialog{ width:100vw; max-width:100vw; max-height:92vh; margin:auto auto 0; border-radius:16px 16px 0 0; }
 }
 </style></head><body>
-<h1>CoS · Task-Board</h1>
+<div class="top"><h1 id="title">CoS · Task-Board</h1><span id="status" class="status"></span></div>
 <div class="sub">Bearbeitbar. Jede Änderung wird sofort in <b>AI-CoS/tasks/board.md</b> gespeichert (Quelle der Wahrheit). Vor jedem Speichern liegt eine Sicherung in <b>tasks/.board-backups/</b>. <span id="where"></span></div>
 
 <div id="connect" class="connect">Lade …</div>
+<nav id="tabs" class="tabs" style="display:none"></nav>
+<div id="kpis" class="kpis"></div>
 
 <div class="bar" id="bar" style="display:none">
   <input type="search" id="q" placeholder="Suchen (Titel, Notiz, Tags)">
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
-  <span id="status" class="status"></span>
 </div>
-<div class="grid" id="grid"></div>
-<div class="foot" id="foot"></div>
+<section id="v-tasks" class="view"><div class="grid" id="grid"></div>
+<div class="foot" id="foot"></div></section>
+<section id="v-heute" class="view" style="display:none"></section>
+<section id="v-mails" class="view" style="display:none"><div class="msearch"><input type="search" id="mq" placeholder="Alle Mails im Posteingang durchsuchen (Betreff, Absender, Text)"></div><div id="mlist"></div></section>
+<section id="v-portfolio" class="view" style="display:none"></section>
+<section id="v-links" class="view" style="display:none"></section>
 
 <dialog id="dlgTask"><form method="dialog" class="dlg" id="fTask">
   <h2 id="dTitle">Task bearbeiten</h2>
@@ -100,8 +167,10 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
   </div>
   <label>Position im Panel</label><select id="ePos"><option value="">unverändert</option><option value="top">an den Anfang</option><option value="end">ans Ende</option></select>
   <label>Tags (mit Komma getrennt)</label><input id="eTags" placeholder="#Roger, #Legal">
+  <label>Verknüpft: Mails, Claude-Chats, Dateien (ein Link pro Zeile)</label><textarea id="eLinks" placeholder="https://claude.ai/chat/…&#10;https://outlook.office365.com/owa/?ItemID=…"></textarea>
+  <div class="lhint">Chat-Link: im Claude-Chat oben „Teilen“ bzw. Adresse kopieren und hier einfügen. Mails hängst du im Reiter Mails mit „An Task hängen“ an.</div>
   <label>Notiz</label><textarea id="eNote"></textarea>
-  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><span class="sp"></span>
+  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener">Mit Buddy bearbeiten</a><span class="sp"></span>
     <button type="button" id="eCancel">Abbrechen</button><button type="submit" class="primary">Speichern</button></div>
 </form></dialog>
 
@@ -112,6 +181,13 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
   <div id="pMove"><label>Reihenfolge</label><div class="mv"><button type="button" id="pLeft">Nach vorne</button><button type="button" id="pRight">Nach hinten</button></div></div>
   <div class="acts"><button type="button" class="danger" id="pDelete">Löschen (nur wenn leer)</button><span class="sp"></span>
     <button type="button" id="pCancel">Abbrechen</button><button type="submit" class="primary">Speichern</button></div>
+</form></dialog>
+
+<dialog id="dlgAttach"><form method="dialog" class="dlg" id="fAttach">
+  <h2>Mail an Task hängen</h2>
+  <div class="lhint" id="aMail"></div>
+  <label>Task</label><select id="aList" size="10"></select>
+  <div class="acts"><span class="sp"></span><button type="button" id="aCancel">Abbrechen</button><button type="submit" class="primary">Anhängen</button></div>
 </form></dialog>
 
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastUndo" style="display:none">Rückgängig</button></div>
@@ -229,7 +305,7 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
     if (f) f.value = value;
     else {
       // Reihenfolge due, tags, note, done beibehalten
-      const order = ['due', 'tags', 'note', 'done'];
+      const order = ['due', 'tags', 'link', 'note', 'done'];
       const nf = { key, value };
       let at = t.fields.length;
       for (let i = 0; i < t.fields.length; i++) {
@@ -255,7 +331,7 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
         const i = findTask(model, op.key); if (i < 0) return 'Task nicht mehr gefunden (inzwischen geaendert?)';
         const t = L[i];
         if (op.title != null) { const v = clean(op.title); if (!v) return 'Titel darf nicht leer sein'; t.title = v; }
-        ['due', 'tags', 'note'].forEach(k => { if (op[k] != null) setField(t, k, op[k]); });
+        ['due', 'tags', 'link', 'note'].forEach(k => { if (op[k] != null) setField(t, k, op[k]); });
         if (op.status) t.status = op.status;
         t.dirty = true; return null;
       }
@@ -263,7 +339,7 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
         const p = findPanel(model, op.panel); if (p < 0) return 'Panel nicht gefunden';
         const title = clean(op.title); if (!title) return 'Titel darf nicht leer sein';
         const t = { kind: 'task', status: op.status || 'active', title, fields: [], raw: '', dirty: true };
-        ['due', 'tags', 'note'].forEach(k => { if (op[k]) setField(t, k, op[k]); });
+        ['due', 'tags', 'link', 'note'].forEach(k => { if (op[k]) setField(t, k, op[k]); });
         L.splice(lastTaskInsert(model, p), 0, t); return null;
       }
       case 'move': {
@@ -324,7 +400,7 @@ dialog::backdrop{ background:rgba(20,25,35,.35); }
   root.TBCore = { parse, serialize, view, applyOp, keyOf, clean };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
-<script>window.TB_CONFIG = {"clientId": "__CLIENT_ID__", "tenantId": "__TENANT_ID__", "path": "AI-CoS/tasks/board.md"};</script>
+<script>window.TB_CONFIG = {"clientId": "e0623805-5ed8-4c9c-810f-89142a25bd02", "tenantId": "742d31f0-26eb-4f55-b84e-a6212d234a0e", "path": "AI-CoS/tasks/board.md"};</script>
 <script>/*! @azure/msal-browser v3.30.0 2025-08-05 */
 "use strict";!function(e,t){"object"==typeof exports&&"undefined"!=typeof module?t(exports):"function"==typeof define&&define.amd?define(["exports"],t):t((e="undefined"!=typeof globalThis?globalThis:e||self).msal={})}(this,(function(e){
 /*! @azure/msal-common v14.16.1 2025-08-05 */
@@ -475,13 +551,46 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
         }
       }
     },
-    logout() { if (app) app.logoutRedirect({ account }); }
+    logout() { if (app) app.logoutRedirect({ account }); },
+    // ---- Cockpit: nur lesend ----
+    cockpit: true,
+    async api(path, headers) {
+      const r = await g('GET', path, undefined, headers);
+      if (!r.ok) throw new Error('Microsoft antwortet ' + r.status + ' fuer ' + path.split('?')[0]);
+      return r.json();
+    },
+    async apiAll(path, headers, max) {   // alle Seiten einer Liste (folgt @odata.nextLink)
+      let url = path, out = [];
+      while (url && out.length < (max || 20000)) {
+        const r = await g('GET', url, undefined, headers);
+        if (!r.ok) throw new Error('Microsoft antwortet ' + r.status);
+        const j = await r.json(); out = out.concat(j.value || []); url = j['@odata.nextLink'] || null;
+      }
+      return out;
+    },
+    async readPath(path) {   // Datei auf OneDrive lesen, null wenn nicht vorhanden
+      const r = await g('GET', '/me/drive/root:/' + enc(path) + '?$select=id,webUrl,@microsoft.graph.downloadUrl');
+      if (r.status === 404) return null;
+      if (!r.ok) throw new Error('OneDrive antwortet ' + r.status);
+      const m = await r.json();
+      const d = await fetch(m['@microsoft.graph.downloadUrl']);
+      return { text: d.ok ? await d.text() : '', webUrl: m.webUrl };
+    },
+    async metaPath(path) {
+      const r = await g('GET', '/me/drive/root:/' + enc(path) + '?$select=id,webUrl,name');
+      return r.ok ? r.json() : null;
+    },
+    async listPath(path) {
+      const r = await g('GET', '/me/drive/root:/' + enc(path) + ':/children?$select=name&$top=999');
+      return r.ok ? (await r.json()).value.map(x => x.name) : [];
+    }
   };
 })();
 </script>
 <script>
 (() => {
 const C = window.TBCore;
+let onRender = null, cockpitStart = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -493,6 +602,7 @@ S.init(ui).then(async () => {
   $('connect').style.display = 'none'; $('bar').style.display = 'flex';
   $('where').textContent = 'Verbunden: ' + S.label + (ui.account ? ' (' + ui.account + ')' : '') + '.';
   await reload(); setInterval(poll, S.pollMs || 5000);
+  if (cockpitStart) { await cockpitStart(); }
   document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
 }).catch(e => { $('connect').textContent = 'Fehler beim Verbinden: ' + e.message; });
 
@@ -542,6 +652,16 @@ function toast(msg, undo) {
 }
 function fmtDue(d) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? m[3] + '.' + m[2] + '.' + m[1].slice(2) : d; }
 function field(t, k) { const f = t.fields.find(x => x.key === k); return f ? f.value : ''; }
+function linksOf(t) { return field(t, 'link').split(/\s*\|\s*/).filter(Boolean); }
+function linkKind(u) {
+  if (/outlook\.(office|live)|ItemID=|owa\//i.test(u)) return ['mail', 'Mail'];
+  if (/claude\.ai\//i.test(u)) return ['chat', 'Chat'];
+  if (/sharepoint\.com|onedrive|1drv\.ms/i.test(u)) return ['file', 'Datei'];
+  return ['', 'Link'];
+}
+function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="_blank" rel="noopener">' + k[1] + ' ↗</a>'; }).join(''); }
+function buddyUrl(text) { return 'https://claude.ai/new?q=' + encodeURIComponent(text); }
+function taskPrompt(l) { return 'Buddy, lass uns diesen Task bearbeiten: „' + l.title + '“.' + (field(l, 'due') ? ' Frist ' + field(l, 'due') + '.' : '') + (field(l, 'note') ? ' Stand: ' + field(l, 'note').slice(0, 600) : '') + (linksOf(l).length ? ' Verknüpft: ' + linksOf(l).join(' ') : '') + ' Quelle: tasks/board.md. Was schlägst du vor?'; }
 function tagsOf(t) { return field(t, 'tags').split(',').map(s => s.trim()).filter(Boolean); }
 function matches(t, q) { if (!q) return true; return (t.title + ' ' + field(t, 'note') + ' ' + field(t, 'tags')).toLowerCase().includes(q); }
 
@@ -557,7 +677,7 @@ function render() {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
       let b = l.status === 'hold' ? '<span class="hold">On-Hold</span>' : (due ? '<span class="due">⚠ ' + esc(fmtDue(due)) + '</span>' : '');
-      tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>');
+      tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>'); b += chipsHtml(l);
       const note = field(l, 'note');
       return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="true" data-k="' + id + '">'
         + '<button class="chk" title="Erledigt, archivieren" data-arch="' + id + '"></button><div class="body">'
@@ -585,6 +705,7 @@ function render() {
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
   $('foot').textContent = total + ' offene Aufgaben · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
+  if (onRender) onRender();
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
@@ -594,7 +715,7 @@ $('grid').addEventListener('click', e => {
   const a = e.target.closest('[data-arch]'); if (a) { e.stopPropagation(); archive(a.dataset.arch); return; }
   const r = e.target.closest('[data-react]'); if (r) { commit({ type: 'status', key: keys.get(r.dataset.react), status: 'active' }); return; }
   const pe = e.target.closest('[data-pedit]'); if (pe) { openPanel(pe.dataset.pedit); return; }
-  if (e.target.closest('input')) return;
+  if (e.target.closest('input') || e.target.closest('a')) return;
   const t = e.target.closest('.task[data-k]'); if (t) openTask(t.dataset.k);
 });
 function archive(id) {
@@ -621,14 +742,35 @@ function openTask(id) {
   $('eDue').dataset.orig = field(l, 'due');
   $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note');
   $('ePanel').innerHTML = C.view(model).map(p => '<option' + (p.name === editing.panel ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
+  $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
   $('ePos').value = ''; $('eArchive').style.display = ''; $('dlgTask').showModal();
+}
+function openNewTask(pre) {
+  pre = pre || {}; const panels = C.view(model).map(p => p.name);
+  const def = pre.panel || (panels.includes('Inbox') ? 'Inbox' : panels[0]);
+  editing = { isNew: true, panel: def };
+  $('dTitle').textContent = 'Neuer Task';
+  $('eTitle').value = pre.title || ''; $('eStatus').value = 'active'; $('eDue').value = ''; $('eDue').dataset.orig = '';
+  $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || '';
+  $('ePanel').innerHTML = panels.map(n => '<option' + (n === def ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+  $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
 }
 $('eCancel').onclick = () => { $('dlgTask').close(); editing = null; };
 $('dlgTask').addEventListener('close', () => { editing = null; });
 $('fTask').onsubmit = e => {
   e.preventDefault(); if (!editing) return;
-  const ed = editing; const dueIn = $('eDue').value || (($('eDue').dataset.orig && !/^\d{4}-\d{2}-\d{2}$/.test($('eDue').dataset.orig)) ? $('eDue').dataset.orig : '');
-  const op = { type: 'edit', key: ed.key, title: $('eTitle').value, status: $('eStatus').value, due: dueIn, tags: $('eTags').value, note: $('eNote').value };
+  const ed = editing;
+  const linkIn = $('eLinks').value.split(/\s*\n\s*|\s*\|\s*/).map(x => x.trim()).filter(Boolean).join(' | ');
+  if (ed.isNew) {
+    const title = $('eTitle').value, panel = $('ePanel').value, top = $('ePos').value === 'top'; $('dlgTask').close();
+    commit({ type: 'add', panel, title, status: $('eStatus').value, due: $('eDue').value, tags: $('eTags').value, note: $('eNote').value, link: linkIn }).then(okay => {
+      if (!okay || !top) return; const p = C.view(model).find(x => x.name === panel); if (!p || p.tasks.length < 2) return;
+      const t = p.tasks.slice().reverse().find(x => x.line.title === C.clean(title)); if (t && p.tasks[0].idx !== t.idx) commit({ type: 'move', key: C.keyOf(model, t.idx), beforeKey: C.keyOf(model, p.tasks[0].idx) });
+      toast('Task angelegt: ' + C.clean(title).slice(0, 60));
+    });
+    return;
+  } const dueIn = $('eDue').value || (($('eDue').dataset.orig && !/^\d{4}-\d{2}-\d{2}$/.test($('eDue').dataset.orig)) ? $('eDue').dataset.orig : '');
+  const op = { type: 'edit', key: ed.key, title: $('eTitle').value, status: $('eStatus').value, due: dueIn, tags: $('eTags').value, note: $('eNote').value, link: linkIn };
   const target = $('ePanel').value; $('dlgTask').close();
   const pos = $('ePos').value;
   commit(op).then(okay => {
@@ -690,6 +832,247 @@ $('grid').addEventListener('drop', e => {
     else { const p = e.target.closest('.panel'); if (p && !(t && t.dataset.k === d.id)) commit({ type: 'move', key, panel: p.dataset.panel }); }
   } else { const p = e.target.closest('.panel'); if (p && p.dataset.panel !== d.name) commit({ type: 'movePanel', name: d.name, before: p.dataset.panel }); }
 });
+// Cockpit-Teil der Online-Version (nur wenn die Speicher-Anbindung S.cockpit meldet, also OneDrive).
+// Wird von build-taskboard-edit.py INNERHALB des App-Skripts eingesetzt und nutzt dessen Helfer
+// ($, esc, C, S, model, keys, field, fmtDue, commit, openTask, openNewTask, setStatus, linksOf,
+//  linkKind, chipsHtml, buddyUrl, onRender, cockpitStart).
+// LESEND: Mails (ganzer Posteingang), Termine, Briefing, Links. Geschrieben wird nur board.md via commit().
+if (S.cockpit) {
+  const P = {
+    briefings: 'AI-CoS/knowledge/briefings',
+    triage: 'AI-CoS/knowledge/cockpit/mail-triage.json',
+    links: 'AI-CoS/knowledge/cockpit/links.md',
+    register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx'
+  };
+  const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
+  const PAGE = 40;
+  const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false };
+  const today = () => new Date().toLocaleDateString('sv-SE');
+  const hm = d => (d || '').slice(11, 16);
+  function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* optional */ } }
+  const fromOf = m => m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address) : '';
+
+  // ---- Mini-Markdown (Briefing, Links) ----
+  function inline(s) {
+    return esc(s)
+      .replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+      .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  }
+  function md(text) {
+    const out = []; let list = null;
+    const close = () => { if (list) { out.push('</' + list + '>'); list = null; } };
+    for (const raw of text.split('\n')) {
+      const l = raw.replace(/\s+$/, ''); let m;
+      if (!l.trim()) { close(); continue; }
+      if ((m = l.match(/^(#{1,6})\s+(.*)$/))) { close(); const h = Math.min(6, m[1].length + 2); out.push('<h' + h + '>' + inline(m[2]) + '</h' + h + '>'); continue; }
+      if ((m = l.match(/^\s*(\d+)\.\s+(.*)$/))) { if (list !== 'ol') { close(); out.push('<ol>'); list = 'ol'; } out.push('<li value="' + m[1] + '">' + inline(m[2]) + '</li>'); continue; }
+      if ((m = l.match(/^\s*[-*]\s+(.*)$/))) { if (list !== 'ul') { close(); out.push('<ul>'); list = 'ul'; } out.push('<li>' + inline(m[1]) + '</li>'); continue; }
+      close(); out.push('<p>' + inline(l) + '</p>');
+    }
+    close(); return out.join('');
+  }
+
+  // ---- Laden ----
+  async function loadBrief() {
+    let name = today() + '.md', f = await S.readPath(P.briefings + '/' + name);
+    if (!f) {
+      const names = (await S.listPath(P.briefings)).filter(n => /^\d{4}-\d{2}-\d{2}\.md$/.test(n)).sort();
+      name = names[names.length - 1];
+      f = name ? await S.readPath(P.briefings + '/' + name) : null;
+    }
+    st.briefDate = name ? name.slice(0, 10) : null;
+    const text = f ? f.text.split(/\n---\s*\n/)[0] : '';
+    st.brief = text;
+    const sec = text.split(/\n## /).find(x => /^Braucht dich/.test(x.trim())) || '';
+    st.needs = (sec.match(/^\d+\.\s/gm) || []).length;
+  }
+  async function loadCal() {
+    const d0 = new Date(); d0.setHours(0, 0, 0, 0); const d1 = new Date(d0); d1.setDate(d1.getDate() + 1);
+    const r = await S.api('/me/calendarView?startDateTime=' + d0.toISOString() + '&endDateTime=' + d1.toISOString()
+      + '&$select=subject,start,end,location,webLink,isAllDay,showAs,isCancelled&$orderby=start/dateTime&$top=50',
+      { Prefer: 'outlook.timezone="Europe/Zurich"' });
+    st.cal = (r.value || []).filter(e => !e.isCancelled);
+  }
+  async function loadMails() {
+    // ALLE Mails im Posteingang, seitenweise (100 je Abruf), nur Kopfdaten
+    const [box, all] = await Promise.all([
+      S.api('/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount'),
+      S.apiAll('/me/mailFolders/inbox/messages?$top=100&$orderby=receivedDateTime desc'
+        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag')
+    ]);
+    st.inbox = box; st.mails = all;
+    st.triage = {}; st.triageDate = null;
+    const f = await S.readPath(P.triage).catch(() => null);
+    if (f && f.text) {
+      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); }
+      catch (e) { st.err.triage = 'mail-triage.json nicht lesbar'; }
+    }
+  }
+  async function loadLinks() {
+    const f = await S.readPath(P.links); st.links = f ? f.text : null;
+    const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
+  }
+  async function loadAll() {
+    if (st.loading) return; st.loading = true; st.err = {};
+    const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
+    await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
+    st.loading = false; paint();
+  }
+
+  // ---- Verknuepfung Mail <-> Task ----
+  function tasksForMail(m) {
+    if (!model || !m.webLink) return [];
+    return C.view(model).flatMap(p => p.visible).filter(t => linksOf(t.line).includes(m.webLink));
+  }
+  function mailCat(m) {
+    const c = (st.triage[m.internetMessageId] || {}).cat;
+    if (c) return c;
+    return st.triageDate && Date.parse(m.receivedDateTime) < Date.parse(st.triageDate) ? 'old' : 'neu';
+  }
+
+  // ---- Anzeige ----
+  function kpis() {
+    const in7 = new Date(); in7.setDate(in7.getDate() + 7); const lim = in7.toLocaleDateString('sv-SE');
+    const vis = model ? C.view(model).flatMap(p => p.visible) : [];
+    const dueSoon = vis.filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') <= lim).length;
+    const needsMail = st.mails.filter(m => mailCat(m) === 'needs').length;
+    const unread = st.inbox ? st.inbox.unreadItemCount : st.mails.filter(m => !m.isRead).length;
+    const card = (lbl, val, sub, tab, tone) => '<button class="kpi ' + (tone || '') + '" data-go="' + tab + '"><span class="kl">' + lbl + '</span><span class="kv">' + val + '</span><span class="ks">' + sub + '</span></button>';
+    $('kpis').innerHTML =
+      card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : '')
+      + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'heute', '')
+      + card('Posteingang', unread + ' ungelesen', (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : ''), 'mails', needsMail ? 'hot' : '')
+      + card('Tasks', vis.length, dueSoon + ' fällig in 7 Tagen', 'tasks', dueSoon ? 'warm' : '');
+  }
+  function nextEvent() {
+    const now = new Date().toTimeString().slice(0, 5);
+    const n = st.cal.find(e => !e.isAllDay && hm(e.end.dateTime) > now); return n ? 'nächster ' + hm(n.start.dateTime) + ' ' + n.subject : null;
+  }
+  function paintHeute() {
+    const t = today();
+    let b = '<section class="card"><div class="ch"><h2>Buddys Lage</h2><span class="cs">' + (st.briefDate ? (st.briefDate === t ? 'heute' : 'Stand ' + fmtDue(st.briefDate) + ' · heutige Lage fehlt noch') : '') + '</span>'
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (st.briefDate || t) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
+    b += st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
+    b += '</section>';
+    let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
+    if (st.err.cal) c += '<div class="errbox">Kalender nicht lesbar: ' + esc(st.err.cal) + '</div>';
+    else if (!st.cal.length) c += '<div class="empty">Keine Termine heute.</div>';
+    else { const now = new Date().toTimeString().slice(0, 5);
+      c += st.cal.map(e => '<a class="ev' + (!e.isAllDay && hm(e.end.dateTime) <= now ? ' past' : '') + '" href="' + esc(e.webLink) + '" target="_blank" rel="noopener"><span class="et">' + (e.isAllDay ? 'ganztägig' : hm(e.start.dateTime) + '<small>' + hm(e.end.dateTime) + '</small>') + '</span><span class="eb"><span class="es">' + esc(e.subject || '(ohne Titel)') + '</span>' + (e.location && e.location.displayName ? '<span class="el">' + esc(e.location.displayName) + '</span>' : '') + '</span></a>').join(''); }
+    c += '</section>';
+    // Fällige Tasks
+    const in7 = new Date(); in7.setDate(in7.getDate() + 7); const lim = in7.toLocaleDateString('sv-SE');
+    const due = model ? C.view(model).flatMap(p => p.visible.map(x => Object.assign({ panel: p.name, color: p.color }, x))).filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') <= lim).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1) : [];
+    let d = '<section class="card"><div class="ch"><h2>Fällig in 7 Tagen</h2><span class="cs">' + due.length + ' Tasks</span></div>';
+    d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
+      return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
+    d += '</section>';
+    $('v-heute').innerHTML = '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+  }
+  function mailRow(m) {
+    const tr = st.triage[m.internetMessageId] || {};
+    const when = new Date(m.receivedDateTime);
+    const w = when.toDateString() === new Date().toDateString() ? when.toTimeString().slice(0, 5) : when.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const linked = tasksForMail(m);
+    return '<div class="mail' + (m.isRead ? '' : ' unread') + '">'
+      + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + w + '</span></div>'
+      + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
+      + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
+      + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
+      + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="_blank" rel="noopener">Outlook</a>'
+      + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
+  }
+  function paintMails() {
+    if (st.err.mails) { $('v-mails').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '</div>'; return; }
+    const q = st.mq.trim().toLowerCase();
+    const list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
+    const g = { needs: [], neu: [], waiting: [], info: [], old: [] };
+    list.forEach(m => (g[mailCat(m)] || g.old).push(m));
+    const sec = (k, title, sub, open) => {
+      if (!g[k].length) return '';
+      const n = st.shown[k] || PAGE, rows = g[k].slice(0, n).map(mailRow).join('');
+      return '<details class="mgroup g-' + k + '"' + (open ? ' open' : '') + ' data-g="' + k + '"><summary><span class="gt">' + title + '</span><span class="cnt2">' + g[k].length + '</span><span class="cs">' + sub + '</span></summary>' + rows
+        + (g[k].length > n ? '<button class="more" data-more="' + k + '">Weitere ' + Math.min(PAGE, g[k].length - n) + ' von ' + (g[k].length - n) + ' anzeigen</button>' : '') + '</details>';
+    };
+    const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet';
+    const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
+    const isOpen = (k, d) => (k in open ? open[k] : d);
+    $('mlist').innerHTML = '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
+      + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
+      + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
+      + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
+      + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
+      + sec('old', 'Älter', 'vor Buddys Einordnung, nicht bewertet', isOpen('old', !!q));
+  }
+  function paintPortfolio() {
+    if (!model) return;
+    const p = C.view(model).find(x => x.name === 'Portfolio');
+    const rows = p ? p.visible.slice().sort((a, b) => (field(a.line, 'due') || '9999') < (field(b.line, 'due') || '9999') ? -1 : 1) : [];
+    let h = '<section class="card" style="--c:' + esc(p ? p.color : '#15803d') + '"><div class="ch"><h2>Portfolio</h2><span class="cs">' + rows.length + ' offene Punkte, nach Frist</span>'
+      + (st.registerUrl ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
+    h += rows.length ? rows.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); const d = field(t.line, 'due');
+      return '<div class="prow" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
+    $('v-portfolio').innerHTML = h + '</section>';
+  }
+  function paintLinks() {
+    $('v-links').innerHTML = '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, nimm diesen Link in die Cockpit-Linkliste auf: ')) + '" target="_blank" rel="noopener">Link aufnehmen lassen</a></div>'
+      + (st.err.links ? '<div class="errbox">' + esc(st.err.links) + '</div>' : (st.links ? '<div class="md links">' + md(st.links.replace(/^#\s.*\n/, '')) + '</div>' : '<div class="empty">Noch keine Linkliste.</div>')) + '</section>';
+  }
+  function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); paintLinks(); }
+
+  // ---- Mail an bestehenden Task haengen ----
+  function attachDialog(m) {
+    const all = C.view(model).flatMap(p => p.visible.map(t => ({ t, p })));
+    $('aList').innerHTML = all.map(({ t, p }) => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return '<option value="' + id + '">' + t.num + '/ ' + esc(t.line.title.slice(0, 90)) + ' · ' + esc(p.name) + '</option>'; }).join('');
+    $('aMail').textContent = (m.subject || '(ohne Betreff)') + ' · ' + fromOf(m);
+    $('dlgAttach').dataset.mid = m.id; $('dlgAttach').showModal();
+  }
+  $('fAttach').onsubmit = e => {
+    e.preventDefault(); const m = st.mails.find(x => x.id === $('dlgAttach').dataset.mid); const id = $('aList').value; $('dlgAttach').close();
+    if (!m || !id) return; const t = model.lines[+id.slice(1)]; const links = linksOf(t);
+    if (links.includes(m.webLink)) { setStatus('Mail hängt schon an diesem Task', 'ok'); return; }
+    commit({ type: 'edit', key: keys.get(id), link: links.concat(m.webLink).join(' | ') }).then(ok => { if (ok) { toast('Mail an Task gehängt'); paintMails(); } });
+  };
+  $('aCancel').onclick = () => $('dlgAttach').close();
+
+  // ---- Reiter und Aktionen ----
+  function go(tab) {
+    TABS.forEach(([k]) => { $('v-' + k).style.display = k === tab ? '' : 'none'; });
+    document.querySelectorAll('#tabs [data-tab]').forEach(b => b.classList.toggle('on', b.dataset.tab === tab));
+    $('bar').style.display = tab === 'tasks' ? 'flex' : 'none';
+    lsSet('cockpit-tab', tab); try { window.scrollTo(0, 0); } catch (e) { /* ohne Scroll */ }
+  }
+  $('tabs').innerHTML = TABS.map(([k, l]) => '<button data-tab="' + k + '">' + l + '</button>').join('') + '<span class="tsp"></span><button id="btnRefresh" class="rf" title="Alles neu laden">↻</button>';
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) go(b.dataset.tab); });
+  $('btnRefresh').onclick = () => { setStatus('Lade …', 'warn'); loadAll().then(() => setStatus('Aktualisiert ' + new Date().toLocaleTimeString('de-CH'), 'ok')); busy = busy.then(reload).catch(() => {}); };
+  $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+  $('mq').addEventListener('input', () => { st.mq = $('mq').value; st.shown = {}; paintMails(); });
+  $('v-mails').addEventListener('toggle', e => { const d = e.target.closest && e.target.closest('details[data-g]'); if (!d) return;
+    const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {}; o[d.dataset.g] = d.open; lsSet('cockpit-open', JSON.stringify(o)); }, true);
+  document.addEventListener('click', e => {
+    const more = e.target.closest('[data-more]'); if (more) { const k = more.dataset.more; st.shown[k] = (st.shown[k] || PAGE) + PAGE; paintMails(); return; }
+    const mt = e.target.closest('[data-mtask]');
+    if (mt) { const m = st.mails.find(x => x.id === mt.dataset.mtask); if (!m) return;
+      openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
+      return; }
+    const ma = e.target.closest('[data-mattach]'); if (ma) { const m = st.mails.find(x => x.id === ma.dataset.mattach); if (m) attachDialog(m); return; }
+    const po = e.target.closest('[data-open]'); if (po && !e.target.closest('#grid')) { openTask(po.dataset.open); }
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAll(); });
+  setInterval(() => { if (!document.hidden) loadAll(); }, 5 * 60e3);
+  onRender = () => { kpis(); paintPortfolio(); paintHeute(); if (st.mails.length) paintMails(); };
+
+  $('title').textContent = 'Buddy Cockpit';
+  document.title = 'Buddy Cockpit';
+  $('tabs').style.display = 'flex';
+  cockpitStart = () => { go(lsGet('cockpit-tab') || 'heute'); return loadAll(); };
+}
+
 })();
 </script>
 </body></html>
