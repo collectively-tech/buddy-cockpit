@@ -78,6 +78,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ms{ font-size:13.5px; margin-top:1px; } .mp{ font-size:12.5px; color:var(--ink2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .mwhy{ font-size:12.5px; color:var(--acc); margin-top:3px; } .mwhy::before{ content:"Buddy: "; font-weight:700; }
 .sugcard .ch #btnSugRefresh{ margin-left:auto; font-size:12px; padding:4px 10px; }
+.sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
+.sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
 .drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
@@ -877,12 +879,13 @@ if (S.cockpit) {
     links: 'AI-CoS/knowledge/cockpit/links.md',
     register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx',
     themen: 'AI-CoS/knowledge/cockpit/themen.json',
-    decisions: 'AI-CoS/knowledge/cockpit/decisions.json'
+    decisions: 'AI-CoS/knowledge/cockpit/decisions.json',
+    refresh: 'AI-CoS/knowledge/cockpit/refresh-request.json'
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {} };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {}, req: null };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -946,6 +949,8 @@ if (S.cockpit) {
     st.triage = {}; st.triageDate = null;
     const df = await S.readPath(P.decisions).catch(() => null);
     try { st.dec = df && df.text ? (JSON.parse(df.text).items || {}) : {}; } catch (e) { st.dec = {}; }
+    const rq = await S.readPath(P.refresh).catch(() => null);
+    try { st.req = rq && rq.text ? (JSON.parse(rq.text).requested || null) : null; } catch (e) { st.req = null; }
     const f = await S.readPath(P.triage).catch(() => null);
     if (f && f.text) {
       try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; }
@@ -963,7 +968,18 @@ if (S.cockpit) {
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
+    // Aktualisierung angefordert und noch nicht gelaufen: jede Minute nachsehen, bis der Lauf da ist
+    if (pending() && !st.pollT) st.pollT = setTimeout(() => { st.pollT = null; if (!document.hidden) loadAll(); }, 60e3);
   }
+  const pending = () => !!st.req && (!st.triageDate || Date.parse(st.req) > Date.parse(st.triageDate));
+  // Naechster Lauf des geplanten Tasks cockpit-update (cron */30 8-19 * * 1-5, Ortszeit)
+  function nextRun(from) {
+    const d = new Date(from); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60);
+    for (let i = 0; i < 7 * 48; i++) { const wd = d.getDay(), h = d.getHours(); if (wd >= 1 && wd <= 5 && h >= 8 && h <= 19) return d; d.setMinutes(d.getMinutes() + 30); }
+    return null;
+  }
+  const fmtRun = d => { if (!d) return '?'; const t = d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+    return d.toDateString() === new Date().toDateString() ? t : d.toLocaleDateString('de-CH', { weekday: 'short' }) + ' ' + t; };
 
   // ---- Themen: Zuordnung per Stichwort (knowledge/cockpit/themen.json) ----
   const reEsc = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -1051,7 +1067,11 @@ if (S.cockpit) {
     let v = '';
     {
       const stand = st.triageDate ? 'Stand ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch kein Lauf';
-      const refresh = '<a class="btn" id="btnSugRefresh" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Buddy ordnet Posteingang und Vorschläge jetzt neu ein (dauert einige Minuten), danach Cockpit neu laden">Jetzt aktualisieren ↻</a>';
+      const hmOf = x => new Date(x).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
+      const refresh = (pending()
+        ? '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · Lauf spätestens ' + fmtRun(nextRun(Date.now())) + ', Cockpit lädt dann selbst neu</span>'
+        : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., werktags 08:00 bis 19:30, Desktop-App offen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
+        + ' <a class="chip" id="btnSugNow" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Sofort, aber als neuer Chat mit Freigaben">sofort im Chat</a>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
@@ -1195,6 +1215,14 @@ if (S.cockpit) {
       await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
       toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails();
     } catch (err) { md.disabled = false; md.textContent = 'Als Entwurf in Outlook anlegen'; setStatus(err.message, 'err'); }
+  });
+  document.addEventListener('click', async e => {
+    if (!e.target.closest('#btnSugRefresh')) return;
+    const now = new Date().toISOString();
+    try { await S.writePath(P.refresh, JSON.stringify({ requested: now, note: 'Aktualisierung aus dem Cockpit angefordert. Liest der geplante Task cockpit-update: requested neuer als generated = voller Lauf.' }, null, 1));
+      st.req = now; setStatus('Aktualisierung angefordert, Lauf spätestens ' + fmtRun(nextRun(Date.now())) + '.', 'ok'); paintHeute();
+      if (!st.pollT) st.pollT = setTimeout(() => { st.pollT = null; loadAll(); }, 60e3); }
+    catch (err) { setStatus('Anforderung nicht gespeichert: ' + err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
     const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]');
