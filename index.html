@@ -989,10 +989,10 @@ if (S.cockpit) {
     if (pending() && !st.pollT) st.pollT = setTimeout(() => { st.pollT = null; if (!document.hidden) loadAll(); }, 60e3);
   }
   const pending = () => !!st.req && (!st.triageDate || Date.parse(st.req) > Date.parse(st.triageDate));
-  // Naechster Lauf des geplanten Tasks cockpit-update (cron */30 8-17 * * 1-5, Ortszeit: werktags 08:00 bis 17:30)
+  // Naechster Lauf des geplanten Tasks cockpit-update (cron */30 8-17 * * *, Ortszeit: täglich 08:00 bis 17:30)
   function nextRun(from) {
     const d = new Date(from); d.setSeconds(0, 0); d.setMinutes(d.getMinutes() < 30 ? 30 : 60);
-    for (let i = 0; i < 7 * 48; i++) { const wd = d.getDay(), h = d.getHours(); if (wd >= 1 && wd <= 5 && h >= 8 && h <= 17) return d; d.setMinutes(d.getMinutes() + 30); }
+    for (let i = 0; i < 7 * 48; i++) { const h = d.getHours(); if (h >= 8 && h <= 17) return d; d.setMinutes(d.getMinutes() + 30); }
     return null;
   }
   const fmtRun = d => { if (!d) return '?'; const t = d.toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
@@ -1094,7 +1094,7 @@ if (S.cockpit) {
             return '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · ' + (late ? 'Lauf ' + fmtRun(run) + ' ist nicht angekommen (Desktop-App offen?), nächster Versuch ' + fmtRun(nextRun(Date.now()))
               : run && Date.now() > run.getTime() ? 'Lauf ' + fmtRun(run) + ' läuft, Ergebnis gegen ' + fmtRun(new Date(run.getTime() + 10 * 60e3)) + ', Cockpit lädt dann selbst neu'
               : 'Lauf ' + fmtRun(run) + ', Ergebnis rund 10 Min. später' + (run && run.toDateString() !== new Date().toDateString() ? '. Sofort: „sofort im Chat“' : ', Cockpit lädt dann selbst neu')) + '</span>'; })()
-        : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., werktags 08:00 bis 17:30, Desktop-App offen; abends und am Wochenende erst am nächsten Morgen, dann „sofort im Chat“ nehmen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
+        : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., täglich 08:00 bis 17:30, Desktop-App offen; abends erst am nächsten Morgen, dann „sofort im Chat“ nehmen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
         + ' <a class="chip" id="btnSugNow" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Sofort, aber als neuer Chat mit Freigaben">sofort im Chat</a>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
