@@ -77,6 +77,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .mt{ display:flex; gap:10px; } .mf{ flex:1; font-size:13px; } .mw{ font-size:12px; color:var(--ink3); }
 .ms{ font-size:13.5px; margin-top:1px; } .mp{ font-size:12.5px; color:var(--ink2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .mwhy{ font-size:12.5px; color:var(--acc); margin-top:3px; } .mwhy::before{ content:"Buddy: "; font-weight:700; }
+.sugcard .ch #btnSugRefresh{ margin-left:auto; font-size:12px; padding:4px 10px; }
 .drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
@@ -1045,8 +1046,11 @@ if (S.cockpit) {
     d += '</section>';
     const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id]);
     let v = '';
-    if (ps.length || ph.length) {
-      v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · nichts passiert ohne deinen Klick</span></div>'
+    {
+      const stand = st.triageDate ? 'Stand ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch kein Lauf';
+      const refresh = '<a class="btn" id="btnSugRefresh" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Buddy ordnet Posteingang und Vorschläge jetzt neu ein (dauert einige Minuten), danach Cockpit neu laden">Jetzt aktualisieren ↻</a>';
+      v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
+        + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
           + (x.link ? '<a class="chip mail" href="' + esc(x.link) + '" target="outlook">Mail ↗</a>' : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.', true) + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</div>').join('')
@@ -1156,6 +1160,9 @@ if (S.cockpit) {
     paintHeute();
   }
   // „Mit Buddy“: Vorschlag in Cowork besprechen, Chris ergänzt seinen Auftrag am Ende des vorbefüllten Texts
+  const REFRESH_PROMPT = 'Buddy, Cockpit jetzt aktualisieren (Auftrag aus dem Cockpit, kein Briefing). Lies operations/scheduled-mirror/buddy-morning-briefing_cockpit-motor.md und führe SCHRITT 7 (7a bis 7h) jetzt vollständig aus: '
+    + 'Posteingang neu einordnen inklusive der Mails seit dem letzten Lauf, Sent Items abgleichen, Vorschläge und Board-Hinweise NEU erzeugen und dabei alles weglassen, was inzwischen erledigt oder überholt ist (Beleg: neue Mails, Sent Items, tasks/board.md, knowledge/cockpit/decisions.json). '
+    + 'knowledge/cockpit/mail-triage.json komplett neu schreiben, prüfen (JSON gültig, dash-check sauber). Nichts senden, nichts löschen, nichts verschieben, nichts direkt ins Board. Zum Schluss eine Zeile: was neu ist und was weggefallen ist.';
   function talk(x, what) {
     const th = topicOf(x.title + ' ' + (x.why || '') + ' ' + (x.note || ''));
     const ctx = 'Buddy, Vorschlag aus dem Cockpit (ID ' + x.id + '): ' + what + '. Begründung: ' + (x.why || '-') + '.'
