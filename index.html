@@ -52,6 +52,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
 .md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
+.md li.bi.done{ color:var(--ink3); opacity:.75; }
+.donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
 .sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; } .prow.sug button{ font-size:12px; padding:5px 10px; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
@@ -588,7 +590,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       const m = await r.json();
       if (!m['@microsoft.graph.downloadUrl']) throw new Error('Kein Download-Link fuer ' + path);
       const d = await fetch(m['@microsoft.graph.downloadUrl']);
-      return { text: d.ok ? await d.text() : '', webUrl: m.webUrl };
+      return { text: d.ok ? await d.text() : '', webUrl: m.webUrl, modified: m.lastModifiedDateTime || null };
     },
     async writePath(path, text) {   // kleine Cockpit-Datei schreiben (z. B. decisions.json)
       const r = await g('PUT', '/me/drive/root:/' + enc(path) + ':/content', text, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -923,8 +925,10 @@ if (S.cockpit) {
       name = names[names.length - 1];
       f = name ? await S.readPath(P.briefings + '/' + name) : null;
     }
-    st.briefDate = name ? name.slice(0, 10) : null;
-    const text = f ? f.text.split(/\n---\s*\n/)[0] : '';
+    st.briefDate = name ? name.slice(0, 10) : null; st.briefTime = f && f.modified ? f.modified : null;
+    const raw = f ? f.text.split(/\n---\s*\n/)[0] : '';
+    const h1 = raw.match(/^#\s+(.*)\n/); st.briefTitle = h1 ? h1[1].replace(/\s*\d{1,2}\.\d{1,2}\.\d{2,4}\s*$/, '').replace(/\s+(Mo|Di|Mi|Do|Fr|Sa|So)$/, '').trim() : 'Briefing';
+    const text = h1 ? raw.slice(h1[0].length) : raw;
     st.brief = text;
     const sec = text.split(/\n## /).find(x => /^Braucht dich/.test(x.trim())) || '';
     st.needs = (sec.match(/^\d+\.\s/gm) || []).length;
@@ -1046,7 +1050,9 @@ if (S.cockpit) {
   }
   function paintHeute() {
     const t = today();
-    let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">von Buddy</span><span class="cs">' + (st.briefDate ? (st.briefDate === t ? 'heute' : 'Stand ' + fmtDue(st.briefDate) + ' · heutige Lage fehlt noch') : '') + '</span>'
+    const bWhen = st.briefDate ? new Date(st.briefDate + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' }) + (st.briefTime ? ', ' + new Date(st.briefTime).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '') : '';
+    const since = st.triageDate && st.briefTime && Date.parse(st.triageDate) > Date.parse(st.briefTime) ? ' · erledigte Punkte seither abgehakt (Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) + ')' : '';
+    let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">' + (st.briefDate ? esc(st.briefTitle || 'Briefing') + ' ' + bWhen + (st.briefDate === t ? since : ' · heutige Lage fehlt noch') : '') + '</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (st.briefDate || t) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
     b += st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
@@ -1086,6 +1092,9 @@ if (S.cockpit) {
         + '</section>';
     }
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = st.briefDate + '#' + li.dataset.bi;
+      const linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
+      if (linked.length && linked.every(x => /^erledigt/i.test(x.why || ''))) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
