@@ -80,6 +80,16 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ms{ font-size:13.5px; margin-top:1px; } .mp{ font-size:12.5px; color:var(--ink2); margin-top:3px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
 .mwhy{ font-size:12.5px; color:var(--acc); margin-top:3px; } .mwhy::before{ content:"Buddy: "; font-weight:700; }
 .sugcard .ch #btnSugRefresh{ margin-left:auto; font-size:12px; padding:4px 10px; }
+.pfhead{ display:flex; align-items:center; gap:10px; margin-bottom:10px; } .pfkpis{ grid-template-columns:repeat(5,1fr); } .pfk{ cursor:default; }
+.pftw{ overflow-x:auto; } .pft{ width:100%; border-collapse:collapse; font-size:13px; } .pft th,.pft td{ text-align:left; padding:6px 10px; border-bottom:1px solid var(--line); }
+.pft th{ color:var(--ink3); font-weight:600; font-size:11px; text-transform:uppercase; } .pft td.num,.pft th.num{ text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.pfb{ font-size:11px; padding:1px 7px; border-radius:10px; white-space:nowrap; } .pfb-pos{ background:#dcfce7; color:#166534; } .pfb-neg{ background:#fde2e1; color:#991b1b; } .pfb-warn{ background:#fef3c7; color:#92400e; }
+.pfg-done{ color:var(--ok); font-weight:600; } .pfg-past{ color:var(--ink3); } .pfg-open{ color:var(--warm); font-weight:600; }
+.pfnote{ color:var(--ink3); font-size:11.5px; padding:8px 16px 12px; } .pfdonut{ text-align:center; padding:8px 0 4px; color:var(--ink); } .pfmut{ fill:var(--ink3); }
+.pfsw{ display:inline-block; width:10px; height:10px; border-radius:2px; margin-right:7px; vertical-align:middle; }
+.pfupd{ list-style:none; margin:0; padding:0 16px 8px; } .pfupd li{ padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; } .pfupd small{ color:var(--ink3); }
+.pfdot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; } .pfdot-pos{ background:#22c55e; } .pfdot-neg{ background:#ef4444; } .pfdot-warn{ background:#f59e0b; }
+@media (max-width:900px){ .pfkpis{ grid-template-columns:repeat(2,1fr); } }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
 .drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
@@ -882,12 +892,13 @@ if (S.cockpit) {
     register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx',
     themen: 'AI-CoS/knowledge/cockpit/themen.json',
     decisions: 'AI-CoS/knowledge/cockpit/decisions.json',
-    refresh: 'AI-CoS/knowledge/cockpit/refresh-request.json'
+    refresh: 'AI-CoS/knowledge/cockpit/refresh-request.json',
+    portfolio: 'AI-CoS/knowledge/cockpit/portfolio.json'
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {}, req: null };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {}, req: null, pf: null };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -962,6 +973,8 @@ if (S.cockpit) {
     }
   }
   async function loadLinks() {
+    const pf = await S.readPath(P.portfolio).catch(() => null);
+    try { st.pf = pf && pf.text ? JSON.parse(pf.text) : null; } catch (e) { st.pf = null; st.err.pf = 'portfolio.json nicht lesbar'; }
     const f = await S.readPath(P.links); st.links = f ? f.text : null;
     const th = await S.readPath(P.themen).catch(() => null);
     try { st.themen = th && th.text ? JSON.parse(th.text) : null; } catch (e) { st.err.links = 'themen.json nicht lesbar'; }
@@ -1150,15 +1163,48 @@ if (S.cockpit) {
       + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
       + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q));
   }
+  // ---- Portfolio-Ansicht aus knowledge/cockpit/portfolio.json (erzeugt von operations/build-cockpit.py aus dem Register) ----
+  const chf = v => Math.round(v || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+  function pfHtml() {
+    const f = st.pf; if (!f) return st.err.pf ? '<div class="errbox">' + esc(st.err.pf) + '</div>' : '';
+    const k = f.kpis || {}, s = f.status || {};
+    const kp = (v, l) => '<div class="kpi pfk"><span class="kl">' + l + '</span><span class="kv">' + v + '</span></div>';
+    let h = '<div class="pfhead"><span class="cs">BHC Seed Portfolio · Stand ' + esc(f.stand || '') + ' · Werte per ' + esc(f.werte || '') + ' · aus dem Register</span>'
+      + (st.registerUrl ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
+    h += '<div class="kpis pfkpis">' + kp(k.active, 'Aktiv im Portfolio') + kp(k.kale, 'An Kale verkauft') + kp(k.writeoff, 'Write-off / tot') + kp(k.exit, 'Verkauft / Exit') + kp(chf((k.activeValue || 0) / 1000) + 'k', 'Wert aktiv (CHF)') + '</div>';
+    const badge = x => x.tone ? '<span class="pfb pfb-' + esc(x.tone) + '">' + esc(x.signal) + '</span>' : '';
+    const hold = '<section class="card"><div class="ch"><h2>Aktive Beteiligungen</h2><span class="cs">CHF, Werte ' + esc(f.werte || '') + '</span></div><div class="pftw"><table class="pft"><thead><tr><th>Firma</th><th class="num">Invest</th><th class="num">Value</th><th>Signal</th></tr></thead><tbody>'
+      + (f.holdings || []).map(x => '<tr><td>' + esc(x.name) + '</td><td class="num">' + chf(x.invest) + '</td><td class="num">' + chf(x.value) + '</td><td>' + badge(x) + '</td></tr>').join('')
+      + '</tbody></table></div><div class="pfnote">LKC macht rund ' + esc(f.lkcPct) + '% des aktiven Werts aus. Signal = Bewertungs-Signal aus dem Updates-Log.</div></section>';
+    // Ring: Anzahl je Status
+    const cnt = s.count || [], tot = cnt.reduce((a, b) => a + b, 0) || 1, R = 62, C = 2 * Math.PI * R; let off = 0;
+    const tips = i => i === 1 ? s.labels[i] + ': ' + cnt[i] + ' Firmen, Invest CHF ' + chf(s.invest[i]) + ', realisiert, Gegenwert Kale-United CHF ' + chf(s.kaleFundValue)
+      : s.labels[i] + ': ' + cnt[i] + ' Firmen, Invest CHF ' + chf(s.invest[i]) + (i === 3 ? ', Erlös CHF ' : ', Value CHF ') + chf(s.value[i]);
+    const arcs = cnt.map((n, i) => { const ln = C * n / tot; const a = '<circle cx="90" cy="90" r="' + R + '" fill="none" stroke="' + esc(s.colors[i]) + '" stroke-width="30" pointer-events="stroke" stroke-dasharray="' + ln.toFixed(2) + ' ' + (C - ln).toFixed(2) + '" stroke-dashoffset="' + (-off).toFixed(2) + '" transform="rotate(-90 90 90)"><title>' + esc(tips(i)) + '</title></circle>'; off += ln; return a; }).join('');
+    const donut = '<div class="pfdonut"><svg viewBox="0 0 180 180" width="180" height="180" role="img" aria-label="Status-Verteilung">' + arcs
+      + '<text x="90" y="86" text-anchor="middle" font-size="19" font-weight="700" fill="currentColor">' + chf((k.activeValue || 0) / 1000) + 'k</text>'
+      + '<text x="90" y="100" text-anchor="middle" font-size="8" class="pfmut">VALUE AKTIV (CHF)</text>'
+      + '<text x="90" y="114" text-anchor="middle" font-size="10" class="pfmut">Invest ' + chf((k.activeInvest || 0) / 1000) + 'k</text></svg></div>';
+    const vcell = i => i === 1 ? 'realisiert' : chf(s.value[i]);
+    const leg = '<table class="pft"><thead><tr><th>Status</th><th class="num">Firmen</th><th class="num">Invest</th><th class="num">Value</th></tr></thead><tbody>'
+      + (s.labels || []).map((l, i) => '<tr><td><span class="pfsw" style="background:' + esc(s.colors[i]) + '"></span>' + esc(l) + '</td><td class="num">' + cnt[i] + '</td><td class="num">' + chf(s.invest[i]) + '</td><td class="num">' + vcell(i) + '</td></tr>').join('') + '</tbody></table>';
+    const dist = '<section class="card"><div class="ch"><h2>Status-Verteilung</h2></div>' + donut + leg
+      + '<div class="pfnote">Ring = Anzahl je Status. Verkauft = realisierter Erlös (nominal). An Kale: per 31.12.2025 an Kale United transferiert, Gegenwert steckt in der aktiven Kale-United-Position (CHF ' + chf(s.kaleFundValue) + '), keine Doppelzählung.</div></section>';
+    const gov = '<section class="card"><div class="ch"><h2>Governance-Queue</h2><span class="cs">aus dem Register</span></div><div class="pftw"><table class="pft"><thead><tr><th>Firma</th><th>Thema</th><th>Status</th></tr></thead><tbody>'
+      + (f.governance || []).map(x => '<tr><td>' + esc(x.firma) + '</td><td>' + esc(x.thema) + '</td><td><span class="pf' + esc(x.cls) + '">' + esc(x.label) + '</span></td></tr>').join('') + '</tbody></table></div></section>';
+    const upd = '<section class="card"><div class="ch"><h2>Wichtigste Updates</h2><span class="cs">Bewertung</span></div><ul class="pfupd">'
+      + (f.updates || []).map(x => '<li><span class="pfdot pfdot-' + esc(x.tone) + '"></span><b>' + esc(x.firma) + '</b> <small>' + esc(x.date) + '</small><br>' + esc(x.text) + '</li>').join('') + '</ul></section>';
+    return h + '<div class="cols">' + '<div class="stack">' + hold + gov + '</div><div class="stack">' + dist + upd + '</div></div>';
+  }
   function paintPortfolio() {
     if (!model) return;
     const p = C.view(model).find(x => x.name === 'Portfolio');
     const rows = p ? p.visible.slice().sort((a, b) => (field(a.line, 'due') || '9999') < (field(b.line, 'due') || '9999') ? -1 : 1) : [];
-    let h = '<section class="card" style="--c:' + esc(p ? p.color : '#15803d') + '"><div class="ch"><h2>Portfolio</h2><span class="cs">' + rows.length + ' offene Punkte, nach Frist</span>'
-      + (st.registerUrl ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
+    let h = '<section class="card" style="--c:' + esc(p ? p.color : '#15803d') + '"><div class="ch"><h2>Portfolio-Tasks</h2><span class="cs">' + rows.length + ' offene Punkte, nach Frist</span>'
+      + (st.registerUrl && !st.pf ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
     h += rows.length ? rows.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); const d = field(t.line, 'due');
       return '<div class="prow" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
-    $('v-portfolio').innerHTML = h + '</section>';
+    $('v-portfolio').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
   }
   function paintLinks() {
     const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
