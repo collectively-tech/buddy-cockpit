@@ -179,6 +179,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <label>Verknüpft: Mails, Claude-Chats, Dateien (ein Link pro Zeile)</label><textarea id="eLinks" placeholder="https://claude.ai/chat/…&#10;https://outlook.office365.com/owa/?ItemID=…"></textarea>
   <div class="lhint">Chat-Link: im Claude-Chat oben „Teilen“ bzw. Adresse kopieren und hier einfügen. Mails hängst du im Reiter Mails mit „An Task hängen“ an.</div>
   <label>Notiz</label><textarea id="eNote"></textarea>
+  <div id="eTopic"></div>
   <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener">Mit Buddy bearbeiten</a><span class="sp"></span>
     <button type="button" id="eCancel">Abbrechen</button><button type="submit" class="primary">Speichern</button></div>
 </form></dialog>
@@ -612,7 +613,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 <script>
 (() => {
 const C = window.TBCore;
-let onRender = null, cockpitStart = null;
+let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -773,6 +774,7 @@ function openTask(id) {
   $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note');
   $('ePanel').innerHTML = C.view(model).map(p => '<option' + (p.name === editing.panel ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
   $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
+  $('eTopic').innerHTML = ''; if (onTaskOpen) onTaskOpen(l);
   $('ePos').value = ''; $('eArchive').style.display = ''; $('dlgTask').showModal();
 }
 function openNewTask(pre) {
@@ -783,6 +785,7 @@ function openNewTask(pre) {
   $('eTitle').value = pre.title || ''; $('eStatus').value = 'active'; $('eDue').value = ''; $('eDue').dataset.orig = '';
   $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || '';
   $('ePanel').innerHTML = panels.map(n => '<option' + (n === def ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+  $('eTopic').innerHTML = '';
   $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
 }
 $('eCancel').onclick = () => { $('dlgTask').close(); editing = null; };
@@ -1160,6 +1163,12 @@ if (S.cockpit) {
     paintHeute();
   }
   // „Mit Buddy“: Vorschlag in Cowork besprechen, Chris ergänzt seinen Auftrag am Ende des vorbefüllten Texts
+  // Task-Dialog: Thema, bestehende Sitzung (Direktlink) und „Mit Buddy bearbeiten“ mit Verweis auf die Sitzung
+  onTaskOpen = l => {
+    const th = topicOf(l.title + ' ' + field(l, 'note') + ' ' + field(l, 'tags'));
+    $('eTopic').innerHTML = topicChips(th, 'Task „' + l.title + '“.', true);
+    if (th && (th.sessions || []).length) $('eBuddy').href = buddyUrl(taskPrompt(l) + ' Dazu gibt es schon die Sitzung(en) ' + th.sessions.map(n => '„' + n + '“').join(', ') + ' im Projekt Buddy: lies deren Stand zuerst (session_info).');
+  };
   const REFRESH_PROMPT = 'Buddy, Cockpit jetzt aktualisieren (Auftrag aus dem Cockpit, kein Briefing). Lies operations/scheduled-mirror/buddy-morning-briefing_cockpit-motor.md und führe SCHRITT 7 (7a bis 7h) jetzt vollständig aus: '
     + 'Posteingang neu einordnen inklusive der Mails seit dem letzten Lauf, Sent Items abgleichen, Vorschläge und Board-Hinweise NEU erzeugen und dabei alles weglassen, was inzwischen erledigt oder überholt ist (Beleg: neue Mails, Sent Items, tasks/board.md, knowledge/cockpit/decisions.json). '
     + 'knowledge/cockpit/mail-triage.json komplett neu schreiben, prüfen (JSON gültig, dash-check sauber). Nichts senden, nichts löschen, nichts verschieben, nichts direkt ins Board. Zum Schluss eine Zeile: was neu ist und was weggefallen ist.';
