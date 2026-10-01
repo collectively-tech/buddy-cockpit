@@ -1023,7 +1023,9 @@ if (S.cockpit) {
     if (!model || !m.webLink) return [];
     return C.view(model).flatMap(p => p.visible).filter(t => linksOf(t.line).includes(m.webLink));
   }
+  const mailDone = m => { const d = st.dec['mail:' + m.internetMessageId]; return !!d && d.status === 'done'; };
   function mailCat(m) {
+    if (mailDone(m)) return 'done';
     const c = (st.triage[m.internetMessageId] || {}).cat;
     if (c) return c;
     const cut = st.triageDate ? Date.parse(st.triageDate) : Date.now() - 24 * 3600e3;   // ohne Einordnung: nur letzte 24 h als neu
@@ -1094,7 +1096,7 @@ if (S.cockpit) {
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = st.briefDate + '#' + li.dataset.bi;
       const linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
-      if (linked.length && linked.every(x => /^erledigt/i.test(x.why || ''))) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
+      if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
@@ -1114,6 +1116,7 @@ if (S.cockpit) {
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
       + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>' : '')
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
+      + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
   }
@@ -1128,7 +1131,7 @@ if (S.cockpit) {
     }
     const q = st.mq.trim().toLowerCase();
     const list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
-    const g = { needs: [], neu: [], waiting: [], info: [], old: [] };
+    const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
     list.forEach(m => (g[mailCat(m)] || g.old).push(m));
     const sec = (k, title, sub, open) => {
       if (!g[k].length) return '';
@@ -1144,6 +1147,7 @@ if (S.cockpit) {
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
       + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
+      + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
       + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q));
   }
   function paintPortfolio() {
@@ -1159,7 +1163,8 @@ if (S.cockpit) {
   function paintLinks() {
     const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
       + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
-      + ((t.sessions || []).length ? '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '">Projekt Buddy ↗</a>' : '')
+      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung öffnen">Sitzung „' + esc(n) + '“ ↗</a>'
+          : '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '" title="Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste">Sitzung „' + esc(n) + '“ ↗</a>'; }).join('')
       + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Mit Buddy ↗</a></div>').join('') : '';
     const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
     $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
@@ -1188,7 +1193,7 @@ if (S.cockpit) {
     try {
       const cur = await S.readPath(P.decisions).catch(() => null);
       let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
-      d.note = 'Entscheide von Chris zu Buddys Cockpit-Vorschlägen. Schreibt das Cockpit, liest der Morgenlauf.';
+      d.note = 'Entscheide von Chris im Cockpit (Vorschläge, Hinweise, Entwürfe draft:<id>, erledigte Mails mail:<internetMessageId>). Schreibt das Cockpit, lesen Morgenlauf und cockpit-update.';
       d.items = Object.assign(d.items || {}, { [id]: st.dec[id] });
       await S.writePath(P.decisions, JSON.stringify(d, null, 1));
     } catch (e) { setStatus('Entscheid nicht gespeichert: ' + e.message, 'err'); }
@@ -1218,6 +1223,10 @@ if (S.cockpit) {
     return t ? C.keyOf(model, t.idx) : null;
   }
   document.addEventListener('click', async e => {
+    const mdn = e.target.closest('[data-mdone],[data-mundo]');
+    if (mdn) { const m = st.mails.find(x => x.id === (mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
+      await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
+      kpis(); paintMails(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
     const md = e.target.closest('[data-mdraft]'); if (!md) return;
     const m = st.mails.find(x => x.id === md.dataset.mdraft); if (!m) return;
     const tr = st.triage[m.internetMessageId] || {}; if (!tr.draftText) return;
