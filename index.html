@@ -1069,7 +1069,9 @@ if (S.cockpit) {
       const stand = st.triageDate ? 'Stand ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch kein Lauf';
       const hmOf = x => new Date(x).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
       const refresh = (pending()
-        ? '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · Lauf spätestens ' + fmtRun(nextRun(Date.now())) + ', Cockpit lädt dann selbst neu</span>'
+        ? (() => { const run = nextRun(Date.parse(st.req)), late = run && Date.now() > run.getTime() + 20 * 60e3;
+            return '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · ' + (late ? 'Lauf ' + fmtRun(run) + ' ist nicht angekommen (Desktop-App offen?), nächster Versuch ' + fmtRun(nextRun(Date.now()))
+              : 'Lauf ' + fmtRun(run) + ', dauert einige Minuten, Cockpit lädt dann selbst neu') + '</span>'; })()
         : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., werktags 08:00 bis 19:30, Desktop-App offen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
         + ' <a class="chip" id="btnSugNow" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Sofort, aber als neuer Chat mit Freigaben">sofort im Chat</a>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
@@ -1220,7 +1222,7 @@ if (S.cockpit) {
     if (!e.target.closest('#btnSugRefresh')) return;
     const now = new Date().toISOString();
     try { await S.writePath(P.refresh, JSON.stringify({ requested: now, note: 'Aktualisierung aus dem Cockpit angefordert. Liest der geplante Task cockpit-update: requested neuer als generated = voller Lauf.' }, null, 1));
-      st.req = now; setStatus('Aktualisierung angefordert, Lauf spätestens ' + fmtRun(nextRun(Date.now())) + '.', 'ok'); paintHeute();
+      st.req = now; setStatus('Aktualisierung angefordert, Lauf ' + fmtRun(nextRun(Date.now())) + ' (dauert einige Minuten).', 'ok'); paintHeute();
       if (!st.pollT) st.pollT = setTimeout(() => { st.pollT = null; loadAll(); }, 60e3); }
     catch (err) { setStatus('Anforderung nicht gespeichert: ' + err.message, 'err'); }
   });
