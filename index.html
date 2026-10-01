@@ -1044,10 +1044,10 @@ if (S.cockpit) {
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · nichts passiert ohne deinen Klick</span></div>'
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
           + (x.link ? '<a class="chip mail" href="' + esc(x.link) + '" target="outlook">Mail ↗</a>' : '')
-          + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button></div>').join('')
+          + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</div>').join('')
         + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span>'
           + (x.evidence && /^https?:/.test(x.evidence) ? '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>' : '')
-          + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button></div>').join('')
+          + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</div>').join('')
         + '</section>';
     }
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
@@ -1149,6 +1149,14 @@ if (S.cockpit) {
       await S.writePath(P.decisions, JSON.stringify(d, null, 1));
     } catch (e) { setStatus('Entscheid nicht gespeichert: ' + e.message, 'err'); }
     paintHeute();
+  }
+  // „Mit Buddy“: Vorschlag in Cowork besprechen, Chris ergänzt seinen Auftrag am Ende des vorbefüllten Texts
+  function talk(x, what) {
+    const ctx = 'Buddy, Vorschlag aus dem Cockpit (ID ' + x.id + '): ' + what + '. Begründung: ' + (x.why || '-') + '.'
+      + (x.link || x.evidence ? ' Quelle: ' + (x.link || x.evidence) + '.' : '')
+      + ' Lies zuerst die Quelle und tasks/board.md. Was du daraus ins Board übernimmst oder verwirfst, trägst du mit dieser ID in knowledge/cockpit/decisions.json ein, damit das Cockpit den Vorschlag ausblendet.'
+      + ' Mein Auftrag dazu: ';
+    return '<a class="btn ghost" href="' + esc(buddyUrl(ctx)) + '" target="_blank" rel="noopener">Mit Buddy</a>';
   }
   function findTaskByTitle(title) {
     const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
