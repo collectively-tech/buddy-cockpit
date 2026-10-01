@@ -1071,7 +1071,8 @@ if (S.cockpit) {
       const refresh = (pending()
         ? (() => { const run = nextRun(Date.parse(st.req)), late = run && Date.now() > run.getTime() + 20 * 60e3;
             return '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · ' + (late ? 'Lauf ' + fmtRun(run) + ' ist nicht angekommen (Desktop-App offen?), nächster Versuch ' + fmtRun(nextRun(Date.now()))
-              : 'Lauf ' + fmtRun(run) + ', dauert einige Minuten, Cockpit lädt dann selbst neu') + '</span>'; })()
+              : run && Date.now() > run.getTime() ? 'Lauf ' + fmtRun(run) + ' läuft, Ergebnis gegen ' + fmtRun(new Date(run.getTime() + 10 * 60e3)) + ', Cockpit lädt dann selbst neu'
+              : 'Lauf ' + fmtRun(run) + ', Ergebnis rund 10 Min. später, Cockpit lädt dann selbst neu') + '</span>'; })()
         : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., werktags 08:00 bis 19:30, Desktop-App offen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
         + ' <a class="chip" id="btnSugNow" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Sofort, aber als neuer Chat mit Freigaben">sofort im Chat</a>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
