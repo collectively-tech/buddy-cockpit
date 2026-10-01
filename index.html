@@ -979,13 +979,16 @@ if (S.cockpit) {
     const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
     return (mobile ? 'https://claude.ai/' : 'claude://claude.ai/') + path;
   }
+  const sessId = n => st.themen && st.themen.sessionIds ? st.themen.sessionIds[n] : null;
   function topicChips(th, context) {
     if (!th) return '';
     const proj = st.themen && st.themen.buddyProject;
     const sess = (th.sessions || []).map(n => '„' + n + '“').join(', ');
     return '<div class="tchips"><span class="tth">Thema: <b>' + esc(th.title) + '</b></span>'
       + (th.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + th.chat)) + '">Chat öffnen ↗</a>' : '')
-      + (sess && proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Sitzung ' + esc(sess) + ' ↗</a>' : '')
+      + (th.sessions || []).map(n => { const sid = sessId(n);
+          return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung im Projekt Buddy öffnen">Sitzung „' + esc(n) + '“ ↗</a>'
+            : (proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Sitzung „' + esc(n) + '“ ↗</a>' : ''); }).join('')
       + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '">Neu mit Buddy ↗</a></div>';
   }
 
@@ -1044,10 +1047,10 @@ if (S.cockpit) {
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · nichts passiert ohne deinen Klick</span></div>'
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
           + (x.link ? '<a class="chip mail" href="' + esc(x.link) + '" target="outlook">Mail ↗</a>' : '')
-          + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</div>').join('')
+          + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.') + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</div>').join('')
         + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span>'
           + (x.evidence && /^https?:/.test(x.evidence) ? '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>' : '')
-          + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</div>').join('')
+          + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.') + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</div>').join('')
         + '</section>';
     }
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
@@ -1152,7 +1155,9 @@ if (S.cockpit) {
   }
   // „Mit Buddy“: Vorschlag in Cowork besprechen, Chris ergänzt seinen Auftrag am Ende des vorbefüllten Texts
   function talk(x, what) {
+    const th = topicOf(x.title + ' ' + (x.why || '') + ' ' + (x.note || ''));
     const ctx = 'Buddy, Vorschlag aus dem Cockpit (ID ' + x.id + '): ' + what + '. Begründung: ' + (x.why || '-') + '.'
+      + (th ? ' Thema: ' + th.title + (th.folder ? ' (Projektordner ' + th.folder + ')' : '') + '.' + ((th.sessions || []).length ? ' Dazu gibt es schon die Sitzung(en) ' + th.sessions.map(n => '„' + n + '“').join(', ') + ' im Projekt Buddy: lies deren Stand zuerst (session_info), damit nichts doppelt läuft.' : '') : '')
       + (x.link || x.evidence ? ' Quelle: ' + (x.link || x.evidence) + '.' : '')
       + ' Lies zuerst die Quelle und tasks/board.md. Was du daraus ins Board übernimmst oder verwirfst, trägst du mit dieser ID in knowledge/cockpit/decisions.json ein, damit das Cockpit den Vorschlag ausblendet.'
       + ' Mein Auftrag dazu: ';
