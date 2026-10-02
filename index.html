@@ -1055,7 +1055,9 @@ if (S.cockpit) {
     const unread = st.inbox ? st.inbox.unreadItemCount : st.mails.filter(m => !m.isRead).length;
     const card = (lbl, val, sub, tab, tone) => '<button class="kpi ' + (tone || '') + '" data-go="' + tab + '"><span class="kl">' + lbl + '</span><span class="kv">' + val + '</span><span class="ks">' + sub + '</span></button>';
     $('kpis').innerHTML =
-      card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : '')
+      // Braucht dich = offene Mails, die Buddy als "needs" eingeordnet hat (laufend aktualisiert, "Erledigt ✓" zählt sofort); ohne Einordnung: Punkte aus der Lage
+      (st.triageDate ? card('Braucht dich', needsMail, 'offene Punkte, Buddy-Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }), 'mails', needsMail ? 'hot' : '')
+        : card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : ''))
       + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'heute', '')
       + card('Posteingang', unread + ' ungelesen', (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : ''), 'mails', needsMail ? 'hot' : '')
       + card('Tasks', vis.length, dueSoon + ' fällig in 7 Tagen', 'tasks', dueSoon ? 'warm' : '');
