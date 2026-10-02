@@ -90,6 +90,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .pfupd{ list-style:none; margin:0; padding:0 16px 8px; } .pfupd li{ padding:8px 0; border-bottom:1px solid var(--line); font-size:13px; } .pfupd small{ color:var(--ink3); }
 .pfdot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; } .pfdot-pos{ background:#22c55e; } .pfdot-neg{ background:#ef4444; } .pfdot-warn{ background:#f59e0b; }
 @media (max-width:900px){ .pfkpis{ grid-template-columns:repeat(2,1fr); } }
+.ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
 .drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
@@ -903,6 +904,21 @@ if (S.cockpit) {
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* optional */ } }
+  // ---- Buddy-Routine über GitHub (privates Repo buddy-cockpit-data): Issue "Aktualisieren" startet die Routine, sie schreibt mail-triage.json dorthin ----
+  const GH_REPO = 'collectively-tech/buddy-cockpit-data';
+  const ghTok = () => lsGet('cockpit-gh-token') || '';
+  async function gh(method, path, body) {
+    const h = { 'Authorization': 'Bearer ' + ghTok(), 'Accept': 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' };
+    if (body) h['Content-Type'] = 'application/json';
+    const r = await fetch('https://api.github.com/repos/' + GH_REPO + path, { method, headers: h, body: body ? JSON.stringify(body) : undefined, cache: 'no-store' });
+    if (!r.ok) throw new Error('GitHub antwortet ' + r.status);
+    return r.status === 204 ? null : r.json();
+  }
+  async function ghTriage() {
+    const c = await gh('GET', '/contents/mail-triage.json');
+    const bin = atob((c.content || '').replace(/\s/g, ''));
+    return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+  }
   const fromOf = m => m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address) : '';
 
   // ---- Mini-Markdown (Briefing, Links) ----
@@ -971,6 +987,14 @@ if (S.cockpit) {
       try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; }
       catch (e) { st.err.triage = 'mail-triage.json nicht lesbar'; }
     }
+    st.appends = [];
+    if (ghTok()) {
+      try { const j = await ghTriage();
+        if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
+          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; }
+        delete st.err.gh;
+      } catch (e) { st.err.gh = e.message; }
+    }
   }
   async function loadLinks() {
     const pf = await S.readPath(P.portfolio).catch(() => null);
@@ -985,10 +1009,11 @@ if (S.cockpit) {
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
-    // Aktualisierung angefordert und noch nicht gelaufen: jede Minute nachsehen, bis der Lauf da ist
-    if (pending() && !st.pollT) st.pollT = setTimeout(() => { st.pollT = null; if (!document.hidden) loadAll(); }, 60e3);
+    if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
+    if (pending()) pollGh();
   }
-  const pending = () => !!st.req && (!st.triageDate || Date.parse(st.req) > Date.parse(st.triageDate));
+  const ghReq = () => lsGet('cockpit-gh-req');
+  const pending = () => { const r = ghReq(); return !!r && (!st.triageDate || Date.parse(r) > Date.parse(st.triageDate)); };
   // Naechster Lauf des geplanten Tasks cockpit-update (Aufgaben Cockpit-Update A/B: täglich 08:00 bis 17:30, alle 30 Min.)
   function nextRun(from) {
     // Zwei geplante Aufgaben (Cloud, an Chris' Mac gebunden): xx:00 und xx:30, täglich 08:00 bis 17:30, Start mit einigen Minuten Versatz
@@ -1092,13 +1117,12 @@ if (S.cockpit) {
     {
       const stand = st.triageDate ? 'Stand ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch kein Lauf';
       const hmOf = x => new Date(x).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' });
-      const refresh = (pending()
-        ? (() => { const run = nextRun(Date.parse(st.req)), late = run && Date.now() > run.getTime() + 20 * 60e3;
-            return '<span class="cs" id="sugReq">Angefordert ' + hmOf(st.req) + ' · ' + (late ? 'Lauf bis ' + fmtRun(run) + ' ist nicht angekommen (Desktop-App offen?), nächster Versuch ' + fmtRun(nextRun(Date.now()))
-              : run && Date.now() > run.getTime() ? 'Lauf sollte laufen, Ergebnis spätestens ' + fmtRun(new Date(run.getTime() + 10 * 60e3)) + ', Cockpit lädt dann selbst neu'
-              : 'Lauf spätestens ' + fmtRun(run) + ', Ergebnis rund 10 Min. später' + (run && run.toDateString() !== new Date().toDateString() ? '. Sofort: „sofort im Chat“' : ', Cockpit lädt dann selbst neu')) + '</span>'; })()
-        : '<button class="btn" id="btnSugRefresh" title="Ein Klick: der geplante Task cockpit-update ordnet beim nächsten Lauf (alle 30 Min., täglich 08:00 bis 17:30, Mac eingeschaltet; abends erst am nächsten Morgen, dann „sofort im Chat“ nehmen) alles neu ein, auch ohne neue Mails. Keine Freigaben nötig.">Jetzt aktualisieren ↻</button>')
-        + ' <a class="chip" id="btnSugNow" href="' + esc(buddyUrl(REFRESH_PROMPT)) + '" target="_blank" rel="noopener" title="Sofort, aber als neuer Chat mit Freigaben">sofort im Chat</a>';
+      const since = ghReq() ? Math.round((Date.now() - Date.parse(ghReq())) / 60e3) : 0;
+      const refresh = !ghTok()
+        ? '<span class="ghset"><input id="ghTokIn" type="password" placeholder="GitHub-Schlüssel (einmalig)" autocomplete="off"><button class="btn" id="btnGhTok">Speichern</button></span>'
+        : pending()
+          ? '<span class="cs" id="sugReq">' + (since > 10 ? 'Läuft seit ' + hmOf(ghReq()) + ', noch kein Ergebnis. Routine „Cockpit aktualisieren“ in Claude prüfen.' : 'Buddy aktualisiert (seit ' + hmOf(ghReq()) + '), Ergebnis in 2 bis 4 Min., Cockpit lädt selbst neu') + '</span>'
+          : '<button class="btn" id="btnSugRefresh" title="Startet sofort Buddys Routine (Claude-Abo). Ergebnis nach 2 bis 4 Minuten, das Cockpit lädt dann selbst neu.">Aktualisieren ↻</button>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span>'
@@ -1267,6 +1291,22 @@ if (S.cockpit) {
       + ' Mein Auftrag dazu: ';
     return '<a class="btn ghost" href="' + esc(buddyUrl(ctx)) + '" target="_blank" rel="noopener">Mit Buddy</a>';
   }
+  function pollGh() { if (st.pollT) return; st.pollT = setTimeout(async () => { st.pollT = null; await loadAll(); if (pending()) pollGh(); }, 20e3); }
+  async function afterGh() {   // Lauf fertig: Issue schliessen, gesendete Mails ins Board spiegeln (mit Sicherung über commit)
+    const n = lsGet('cockpit-gh-issue');
+    if (n && ghReq() && !pending()) { try { await gh('PATCH', '/issues/' + n, { state: 'closed' }); } catch (e) { /* bleibt offen, harmlos */ } lsSet('cockpit-gh-issue', ''); }
+    for (const a of st.appends || []) {
+      if (!a || !a.title || !a.append) continue;
+      const id = 'append:' + a.title.slice(0, 60) + '|' + a.append.slice(0, 80);
+      if (st.dec[id]) continue;
+      const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === a.title);
+      if (!t) continue;
+      const note = field(t.line, 'note');
+      if (note.includes(a.append.trim())) { await decide(id, 'applied'); continue; }
+      const okay = await commit({ type: 'edit', key: C.keyOf(model, t.idx), note: note + a.append });
+      if (okay) await decide(id, 'applied');
+    }
+  }
   function findTaskByTitle(title) {
     const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
     return t ? C.keyOf(model, t.idx) : null;
@@ -1287,12 +1327,13 @@ if (S.cockpit) {
     } catch (err) { md.disabled = false; md.textContent = 'Als Entwurf in Outlook anlegen'; setStatus(err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
+    if (e.target.closest('#btnGhTok')) { const v = ($('ghTokIn').value || '').trim(); if (!v) return; lsSet('cockpit-gh-token', v);
+      try { await gh('GET', ''); setStatus('GitHub verbunden.', 'ok'); loadAll(); } catch (err) { setStatus('Schlüssel geht nicht: ' + err.message, 'err'); lsSet('cockpit-gh-token', ''); paintHeute(); } return; }
     if (!e.target.closest('#btnSugRefresh')) return;
     const now = new Date().toISOString();
-    try { await S.writePath(P.refresh, JSON.stringify({ requested: now, note: 'Aktualisierung aus dem Cockpit angefordert. Liest der geplante Task cockpit-update: requested neuer als generated = voller Lauf.' }, null, 1));
-      st.req = now; setStatus('Aktualisierung angefordert, Lauf spätestens ' + fmtRun(nextRun(Date.now())) + ' (dauert einige Minuten).', 'ok'); paintHeute();
-      if (!st.pollT) st.pollT = setTimeout(() => { st.pollT = null; loadAll(); }, 60e3); }
-    catch (err) { setStatus('Anforderung nicht gespeichert: ' + err.message, 'err'); }
+    try { const iss = await gh('POST', '/issues', { title: 'Aktualisieren ' + new Date().toLocaleString('de-CH'), body: 'Aus dem Buddy Cockpit.' });
+      lsSet('cockpit-gh-req', now); lsSet('cockpit-gh-issue', String(iss.number)); setStatus('Buddy aktualisiert, Ergebnis in 2 bis 4 Minuten.', 'ok'); paintHeute(); pollGh(); }
+    catch (err) { setStatus('Aktualisieren nicht gestartet: ' + err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
     const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]');
