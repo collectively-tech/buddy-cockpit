@@ -55,7 +55,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
-.sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; }
+.sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; } .prow.sug.busy{ opacity:.55; } .prow.sug button:disabled{ cursor:wait; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
 .mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
@@ -1263,6 +1263,7 @@ if (S.cockpit) {
   // ---- Vorschläge übernehmen / verwerfen (Entscheid in decisions.json, damit Buddy nicht doppelt vorschlägt) ----
   async function decide(id, status, extra) {
     st.dec[id] = Object.assign({ status, at: new Date().toISOString() }, extra || {});
+    paintHeute(); // sofort aus der Liste nehmen, Speichern in decisions.json laeuft danach
     try {
       const cur = await S.readPath(P.decisions).catch(() => null);
       let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
@@ -1338,15 +1339,18 @@ if (S.cockpit) {
   document.addEventListener('click', async e => {
     const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]');
     if (!(sa || sr || ha || hr)) return;
-    if (sa) { const x = st.sug.find(y => y.id === sa.dataset.sacc); if (!x) return;
+    const btn = sa || ha; let busy = null;
+    if (btn) { if (btn.disabled) return; const row = btn.closest('.prow'); busy = [...row.querySelectorAll('button')]; busy.forEach(b => { b.disabled = true; }); btn.dataset.lbl = btn.textContent; btn.textContent = 'Wird gespeichert …'; row.classList.add('busy'); }
+    const unbusy = () => { if (!busy) return; busy.forEach(b => { b.disabled = false; }); btn.textContent = btn.dataset.lbl; btn.closest('.prow').classList.remove('busy'); };
+    if (sa) { const x = st.sug.find(y => y.id === sa.dataset.sacc); if (!x) { unbusy(); return; }
       const panels = C.view(model).map(p => p.name); const panel = panels.includes(x.panel) ? x.panel : panels[0];
       const okay = await commit({ type: 'add', panel, title: x.title, due: x.due || '', note: x.note || x.why || '', link: x.link || '' });
-      if (okay) { toast('Task übernommen: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } return; }
+      if (okay) { toast('Task übernommen: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } else unbusy(); return; }
     if (sr) { decide(sr.dataset.srej, 'rejected'); return; }
     if (ha) { const x = st.hyg.find(y => y.id === ha.dataset.hacc); if (!x) return; const key = findTaskByTitle(x.title);
-      if (!key) { toast('Task nicht mehr im Board gefunden (inzwischen geändert?)'); return; }
+      if (!key) { toast('Task nicht mehr im Board gefunden (inzwischen geändert?)'); unbusy(); return; }
       const okay = x.action === 'done' ? await commit({ type: 'status', key, status: 'done' }) : await commit({ type: 'edit', key, due: x.due || '' });
-      if (okay) decide(x.id, 'accepted'); return; }
+      if (okay) { toast(x.action === 'done' ? 'Abgehakt: ' + x.title.slice(0, 60) : 'Frist gesetzt: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } else unbusy(); return; }
     if (hr) { decide(hr.dataset.hrej, 'rejected'); }
   });
 
