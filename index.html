@@ -917,7 +917,10 @@ if (S.cockpit) {
   async function ghTriage() {
     const c = await gh('GET', '/contents/mail-triage.json');
     const bin = atob((c.content || '').replace(/\s/g, ''));
-    return JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+    const j = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, ch => ch.charCodeAt(0))));
+    // Massgebend ist der Commit-Zeitpunkt (die Routine kennt die Uhrzeit nicht immer und schreibt in generated teils eine Schaetzung)
+    try { const cs = await gh('GET', '/commits?path=mail-triage.json&per_page=1'); const cd = cs && cs[0] && cs[0].commit && cs[0].commit.committer && cs[0].commit.committer.date; if (cd) j.generated = cd; } catch (e) { /* dann generated aus der Datei */ }
+    return j;
   }
   const fromOf = m => m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address) : '';
 
