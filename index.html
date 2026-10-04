@@ -1007,8 +1007,19 @@ if (S.cockpit) {
     try { st.themen = th && th.text ? JSON.parse(th.text) : null; } catch (e) { st.err.links = 'themen.json nicht lesbar'; }
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
+  // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
+  const BUILD = '1d6146d473';
+  async function checkVersion() {
+    try {
+      if (!/^https?:/.test(location.protocol)) return;
+      const txt = await fetch(location.pathname + '?vc=' + Date.now(), { cache: 'no-store' }).then(r => r.ok ? r.text() : '');
+      const m = txt.match(/const BUILD = '([0-9a-f]{10})'/);
+      if (m && m[1] !== BUILD && sessionStorage.getItem('cockpit-reload') !== m[1]) { sessionStorage.setItem('cockpit-reload', m[1]); location.replace(location.pathname + '?v=' + m[1]); }
+    } catch (e) { /* offline oder gesperrt: alte Version weiter nutzen */ }
+  }
   async function loadAll() {
     if (st.loading) return; st.loading = true; st.err = {};
+    checkVersion();
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
