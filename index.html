@@ -55,7 +55,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
-.sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; } .prow.sug.busy{ opacity:.55; } .prow.sug button:disabled{ cursor:wait; }
+.sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; } .prow.sug.busy{ opacity:.55; } .lacts{ display:flex; flex-direction:column; gap:6px; margin:6px 0 2px; } .lact{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12.5px; } .lact .laf{ color:var(--ink3); font-weight:600; } .lact .btn, .lact button{ font-size:12px; padding:4px 10px; } .lact details.drf{ flex-basis:100%; } .prow.sug button:disabled{ cursor:wait; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
 .mail.flash{ animation:flash 2.4s ease-out 1; } @keyframes flash{ 0%{ background:#fde68a; } 100%{ background:transparent; } }
 .empty{ padding:16px; color:var(--ink3); font-size:13px; } .errbox{ margin:12px 16px; padding:10px 12px; border-radius:9px; background:var(--hotbg); color:var(--hot); font-size:12.5px; }
@@ -1008,7 +1008,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '1d6146d473';
+  const BUILD = 'de69dc365e';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1110,11 +1110,11 @@ if (S.cockpit) {
     const bWhen = st.briefDate ? new Date(st.briefDate + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' }) + (st.briefTime ? ', ' + new Date(st.briefTime).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '') : '';
     const since = st.triageDate && st.briefTime && Date.parse(st.triageDate) > Date.parse(st.briefTime) ? ' · erledigte Punkte seither abgehakt (Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) + ')' : '';
     // Neuere Lage aus dem Aktualisieren-Lauf (mail-triage.json, Feld lage) schlägt das Morgen-Briefing
-    const useGh = !!(st.lageGh && st.triageDate && (!st.briefTime || Date.parse(st.triageDate) > Date.parse(st.briefTime)));
+    const useGh = st.useGh = !!(st.lageGh && st.triageDate && (!st.briefTime || Date.parse(st.triageDate) > Date.parse(st.briefTime)));
     const ghWhen = useGh ? new Date(st.triageDate).toLocaleString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">' + (useGh ? 'Aktualisiert von Buddy ' + esc(ghWhen) : (st.briefDate ? esc(st.briefTitle || 'Briefing') + ' ' + bWhen + (st.briefDate === t ? since : ' · heutige Lage fehlt noch') : '')) + '</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (useGh ? st.triageDate.slice(0, 10) : (st.briefDate || t)) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
-    b += useGh ? '<div class="md">' + md(st.lageGh, false) + '</div>'
+    b += useGh ? '<div class="md">' + md(st.lageGh, true) + '</div>'
       : st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
     let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
@@ -1152,8 +1152,18 @@ if (S.cockpit) {
         + '</section>';
     }
     $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
-    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = st.briefDate + '#' + li.dataset.bi;
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
       const linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
+      // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
+      const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).slice(0, 3);
+      if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = st.triage[m.internetMessageId] || {};
+        return '<span class="lact"><span class="laf">' + esc(fromOf(m)) + ':</span>'
+          + '<a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a>'
+          + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>'
+            : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
+            : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
+          + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
+          + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener">Mit Buddy</a></span>'; }).join('') + '</div>');
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
   }
@@ -1265,8 +1275,9 @@ if (S.cockpit) {
   function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); paintLinks(); }
 
   // ---- Lage-Punkt -> zugehoerige Mails (Buddy verknuepft in mail-triage.json per "brief": "JJJJ-MM-TT#N") ----
+  const bkey = n => (st.useGh ? 'lage' : st.briefDate) + '#' + n;   // Lage aus dem Lauf: lage#N, Morgen-Briefing: JJJJ-MM-TT#N
   function jumpToBrief(n) {
-    const key = st.briefDate + '#' + n;
+    const key = bkey(n);
     const ids = new Set(Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key)).map(x => x.id));
     const hits = st.mails.filter(m => ids.has(m.internetMessageId));
     if (!hits.length) { toast('Zu Punkt ' + n + ' ist keine Mail im Posteingang verknüpft.'); return; }
@@ -1334,7 +1345,7 @@ if (S.cockpit) {
     const mdn = e.target.closest('[data-mdone],[data-mundo]');
     if (mdn) { const m = st.mails.find(x => x.id === (mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
       await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
-      kpis(); paintMails(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
+      kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
     const md = e.target.closest('[data-mdraft]'); if (!md) return;
     const m = st.mails.find(x => x.id === md.dataset.mdraft); if (!m) return;
     const tr = st.triage[m.internetMessageId] || {}; if (!tr.draftText) return;
@@ -1342,7 +1353,7 @@ if (S.cockpit) {
     try {
       const d = await S.createReplyDraft(m.id, tr.draftText);
       await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
-      toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails();
+      toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails(); paintHeute();
     } catch (err) { md.disabled = false; md.textContent = 'Als Entwurf in Outlook anlegen'; setStatus(err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
@@ -1408,7 +1419,7 @@ if (S.cockpit) {
       openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
       return; }
     const ma = e.target.closest('[data-mattach]'); if (ma) { const m = st.mails.find(x => x.id === ma.dataset.mattach); if (m) attachDialog(m); return; }
-    const bi = e.target.closest('[data-bi]'); if (bi && !e.target.closest('a')) { jumpToBrief(bi.dataset.bi); return; }
+    const bi = e.target.closest('[data-bi]'); if (bi && !e.target.closest('a, button, details, .lacts')) { jumpToBrief(bi.dataset.bi); return; }
     const po = e.target.closest('[data-open]'); if (po && !e.target.closest('#grid')) { openTask(po.dataset.open); }
   });
   document.addEventListener('visibilitychange', () => { if (!document.hidden) loadAll(); });
