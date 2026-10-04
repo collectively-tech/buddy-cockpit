@@ -994,7 +994,7 @@ if (S.cockpit) {
     if (ghTok()) {
       try { const j = await ghTriage();
         if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
-          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; }
+          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
         delete st.err.gh;
       } catch (e) { st.err.gh = e.message; }
     }
@@ -1098,9 +1098,13 @@ if (S.cockpit) {
     const t = today();
     const bWhen = st.briefDate ? new Date(st.briefDate + 'T12:00:00').toLocaleDateString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit' }) + (st.briefTime ? ', ' + new Date(st.briefTime).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) : '') : '';
     const since = st.triageDate && st.briefTime && Date.parse(st.triageDate) > Date.parse(st.briefTime) ? ' · erledigte Punkte seither abgehakt (Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) + ')' : '';
-    let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">' + (st.briefDate ? esc(st.briefTitle || 'Briefing') + ' ' + bWhen + (st.briefDate === t ? since : ' · heutige Lage fehlt noch') : '') + '</span>'
-      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (st.briefDate || t) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
-    b += st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
+    // Neuere Lage aus dem Aktualisieren-Lauf (mail-triage.json, Feld lage) schlägt das Morgen-Briefing
+    const useGh = !!(st.lageGh && st.triageDate && (!st.briefTime || Date.parse(st.triageDate) > Date.parse(st.briefTime)));
+    const ghWhen = useGh ? new Date(st.triageDate).toLocaleString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
+    let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">' + (useGh ? 'Aktualisiert von Buddy ' + esc(ghWhen) : (st.briefDate ? esc(st.briefTitle || 'Briefing') + ' ' + bWhen + (st.briefDate === t ? since : ' · heutige Lage fehlt noch') : '')) + '</span>'
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (useGh ? st.triageDate.slice(0, 10) : (st.briefDate || t)) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
+    b += useGh ? '<div class="md">' + md(st.lageGh, false) + '</div>'
+      : st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
     let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
     if (st.err.cal) c += '<div class="errbox">Kalender nicht lesbar: ' + esc(st.err.cal) + '</div>';
