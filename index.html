@@ -1015,7 +1015,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '57b8b582fd';
+  const BUILD = '0e9817764d';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1166,10 +1166,10 @@ if (S.cockpit) {
       li.dataset.mids = linked.map(x => x.id).join('\n'); li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
       // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
       const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).slice(0, 3);
-      if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = st.triage[m.internetMessageId] || {};
+      if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = triageOf(m);
         return '<span class="lact"><span class="laf">' + esc(fromOf(m)) + ':</span>'
           + '<a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a>'
-          + fwdBlock(m, tr)
+          + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
           + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>'
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
             : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
@@ -1189,12 +1189,23 @@ if (S.cockpit) {
     cand.sort((a, b) => b.sc - a.sc || (a.t < b.t ? 1 : -1));
     return cand.length ? cand.filter(c => c.sc >= cand[0].sc - 1).slice(0, 2).map(c => c.tr) : [];
   }
+  // Schutz und Rückfall für Buddys Vorschläge (Chris 05.10.): Entwurf nur in der Sprache der Mail; Scan „rg“ geht als Rechnung an Canan
+  const EN = /\b(the|and|you|your|for|with|please|thanks|regards|would|could|we|is|are|have|this|that)\b/gi, DE = /\b(und|der|die|das|bitte|danke|gruss|grüsse|hoi|liebe|wir|ist|nicht|für|mit)\b/gi;
+  const lang = t => { const s = String(t || ''); const e = (s.match(EN) || []).length, d = (s.match(DE) || []).length; return e > d + 1 ? 'en' : d > e + 1 ? 'de' : ''; };
+  const draftOk = (m, tr) => { const ml = lang((m.subject || '') + ' ' + (m.bodyPreview || '')), dl = lang(tr.draftText); return !(ml && dl && ml !== dl); };
+  function canan() { const m = st.mails.find(x => x.from && x.from.emailAddress && /canan/i.test(x.from.emailAddress.name || x.from.emailAddress.address || '')); return m ? m.from.emailAddress.address : ''; }
+  function triageOf(m) {
+    const tr = Object.assign({}, st.triage[m.internetMessageId] || {});
+    if (tr.draftText && !draftOk(m, tr)) { tr.draftHidden = 'Buddys Antwort-Entwurf ausgeblendet: falsche Sprache (Mail ist ' + (lang((m.subject || '') + ' ' + (m.bodyPreview || '')) === 'en' ? 'englisch' : 'deutsch') + '). Kommt beim nächsten Aktualisieren neu.'; delete tr.draftText; }
+    if (!tr.forwardTo && /scanner/i.test(fromOf(m)) && /^\s*(rg|rechnung)\b/i.test(m.subject || '') && canan()) { tr.forwardTo = canan(); tr.forwardText = tr.forwardText || 'Hoi Canan\n\nAnbei eine Rechnung (Scan) zur Zahlung.\n\nDanke und Gruss\nChris'; }
+    return tr;
+  }
   const flink = m => { const d = st.dec['fwd:' + m.internetMessageId]; return d && d.link; };
   const fwdBlock = (m, tr) => !tr.forwardTo ? '' : flink(m) ? '<a class="btn" href="' + esc(flink(m)) + '" target="outlook" rel="noopener">Weiterleitung öffnen ↗</a>'
     : S.createForwardDraft ? '<details class="drf"><summary>Weiterleiten an ' + esc(tr.forwardTo) + '</summary><div class="drt">' + esc(tr.forwardText || '') + '</div><button class="primary" data-mfwd="' + esc(m.id) + '">Weiterleitung als Entwurf anlegen</button> <span class="drn">mit Anhang, wird nur angelegt, nicht gesendet</span></details>' : '';
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
   function mailRow(m) {
-    const tr = st.triage[m.internetMessageId] || {};
+    const tr = triageOf(m);
     const when = new Date(m.receivedDateTime);
     const w = when.toDateString() === new Date().toDateString() ? when.toTimeString().slice(0, 5) : when.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: '2-digit' });
     const linked = tasksForMail(m);
@@ -1203,6 +1214,7 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
+      + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
       + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
         + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span>' : '') + '</details>' : '')
       + (tr.forwardTo ? '<div class="ma">' + fwdBlock(m, tr) + '</div>' : '')
@@ -1374,7 +1386,7 @@ if (S.cockpit) {
       await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
       kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
     const mf = e.target.closest('[data-mfwd]');
-    if (mf) { const m = st.mails.find(x => x.id === mf.dataset.mfwd); if (!m) return; const tr = st.triage[m.internetMessageId] || {}; if (!tr.forwardTo) return;
+    if (mf) { const m = st.mails.find(x => x.id === mf.dataset.mfwd); if (!m) return; const tr = triageOf(m); if (!tr.forwardTo) return;
       mf.disabled = true; mf.textContent = 'Lege Weiterleitung an …';
       try { const d = await S.createForwardDraft(m.id, tr.forwardTo, tr.forwardText || '');
         await decide('fwd:' + m.internetMessageId, 'created', { link: d.webLink, to: tr.forwardTo });
@@ -1383,7 +1395,7 @@ if (S.cockpit) {
       return; }
     const md = e.target.closest('[data-mdraft]'); if (!md) return;
     const m = st.mails.find(x => x.id === md.dataset.mdraft); if (!m) return;
-    const tr = st.triage[m.internetMessageId] || {}; if (!tr.draftText) return;
+    const tr = triageOf(m); if (!tr.draftText) return;
     md.disabled = true; md.textContent = 'Lege Entwurf an …';
     try {
       const d = await S.createReplyDraft(m.id, tr.draftText);
