@@ -896,6 +896,7 @@ if (S.cockpit) {
   const P = {
     briefings: 'AI-CoS/knowledge/briefings',
     triage: 'AI-CoS/knowledge/cockpit/mail-triage.json',
+    lageMd: 'AI-CoS/knowledge/cockpit/lage-aktuell.md',
     links: 'AI-CoS/knowledge/cockpit/links.md',
     register: 'AI-CoS/projects/portfolio-bhc/BHC Seed Portfolio - Roger-Setup.xlsx',
     themen: 'AI-CoS/knowledge/cockpit/themen.json',
@@ -999,12 +1000,24 @@ if (S.cockpit) {
     }
     st.appends = [];
     if (ghTok()) {
-      try { const j = await ghTriage();
+      try { const j = await ghTriage(); const odDate = st.triageDate;
+        if (j && j.generated && (!odDate || Date.parse(j.generated) > Date.parse(odDate))) mirrorToOneDrive(j).catch(e => console.log('mirror', e && e.message));
         if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
           st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
         delete st.err.gh;
       } catch (e) { st.err.gh = e.message; }
     }
+  }
+  // Cockpit-Stand auch in den Ordner AI-CoS legen, damit jeder Buddy-Chat dasselbe sieht wie Chris (Chris 05.10.)
+  async function mirrorToOneDrive(j) {
+    await S.writePath(P.triage, JSON.stringify(j, null, 1));
+    const when = new Date(j.generated).toLocaleString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    const needs = (j.items || []).filter(x => x.cat === 'needs' && !/^erledigt/i.test(x.why || ''));
+    const md = '# Lage im Cockpit (das sieht Chris)\n\nStand: ' + when + ' (' + (j.source || 'Lauf') + '). Diese Datei schreibt das Cockpit bei jedem neuen Lauf. Nummern, die Chris nennt („Nr. 5“), beziehen sich auf „Braucht dich“ unten.\n\n'
+      + (j.lage ? j.lage.trim() + '\n\n' : '')
+      + '## Offene Mails, die Chris brauchen (' + needs.length + ')\n\n' + needs.map(x => '- ' + (x.why || x.id)).join('\n') + '\n\n'
+      + '## Vorschläge von Buddy\n\n' + ((j.suggestions || []).map(x => '- Neuer Task: ' + x.title + (x.why ? ' (' + x.why + ')' : '')).concat((j.hygiene || []).map(x => '- ' + (x.action === 'done' ? 'Abhaken? ' : 'Frist? ') + x.title)).join('\n') || '- keine') + '\n';
+    await S.writePath(P.lageMd, md);
   }
   async function loadLinks() {
     const pf = await S.readPath(P.portfolio).catch(() => null);
@@ -1015,7 +1028,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '600b66abbc';
+  const BUILD = 'ab9a793f58';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
