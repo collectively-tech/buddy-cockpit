@@ -50,7 +50,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md ol,.md ul{ margin:4px 0; padding-left:20px; } .md li{ margin:5px 0; } .md p{ margin:6px 0; } .md code{ font-size:12px; background:var(--holdbg); padding:1px 5px; border-radius:5px; }
 .md.links a{ font-weight:600; }
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
-.md li.bi::after{ content:" ↗"; color:var(--acc); font-weight:700; font-size:12px; }
+.md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
@@ -1028,7 +1028,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ab9a793f58';
+  const BUILD = '58557f769b';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1086,9 +1086,9 @@ if (S.cockpit) {
     return '<div class="tchips"><span class="tth">Thema: <b>' + esc(th.title) + '</b></span>'
       + (th.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + th.chat)) + '">Chat öffnen ↗</a>' : '')
       + (th.sessions || []).map(n => { const sid = sessId(n);
-          return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung im Projekt Buddy öffnen">Sitzung „' + esc(n) + '“ ↗</a>'
-            : (proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Sitzung „' + esc(n) + '“ ↗</a>' : ''); }).join('')
-      + (noNew ? '' : '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '" title="Neuer Chat mit Buddy zu diesem Punkt">Mit Buddy ↗</a>') + '</div>';
+          return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung im Projekt Buddy öffnen">Bestehender Chat „' + esc(n) + '“ ↗</a>'
+            : (proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Bestehender Chat „' + esc(n) + '“ ↗</a>' : ''); }).join('')
+      + (noNew ? '' : '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '" title="Neuer Chat mit Buddy zum Thema, mit diesem Punkt als Anlass">Neuer Chat zum Thema ↗</a>') + '</div>';
   }
 
   // ---- Verknuepfung Mail <-> Task ----
@@ -1187,9 +1187,9 @@ if (S.cockpit) {
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
             : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
-          + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener">Mit Buddy</a></span>'; }).join('') + '</div>');
+          + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest und Antwort oder nächsten Schritt vorschlägt">Neuer Chat zu dieser Mail</a></span>'; }).join('') + '</div>');
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
-    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim())); });
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts'))); });
   }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
   const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche'.split(' '));
@@ -1237,7 +1237,7 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
-      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener">Mit Buddy</a></div></div>';
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
   }
   function paintMails() {
     if (st.err.mails) { $('v-mails').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '</div>'; return; }
@@ -1315,8 +1315,8 @@ if (S.cockpit) {
   function paintLinks() {
     const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
       + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
-      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung öffnen">Sitzung „' + esc(n) + '“ ↗</a>'
-          : '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '" title="Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste">Sitzung „' + esc(n) + '“ ↗</a>'; }).join('')
+      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung öffnen">Bestehender Chat „' + esc(n) + '“ ↗</a>'
+          : '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '" title="Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste">Bestehender Chat „' + esc(n) + '“ ↗</a>'; }).join('')
       + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Mit Buddy ↗</a></div>').join('') : '';
     const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
     $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
