@@ -195,7 +195,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <div class="lhint">Chat-Link: im Claude-Chat oben „Teilen“ bzw. Adresse kopieren und hier einfügen. Mails hängst du im Reiter Mails mit „An Task hängen“ an.</div>
   <label>Notiz</label><textarea id="eNote"></textarea>
   <div id="eTopic"></div>
-  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener">Mit Buddy bearbeiten</a><span class="sp"></span>
+  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener" title="Neuer Chat mit Buddy zu diesem Task">Neuer Chat zum Task</a><span class="sp"></span>
     <button type="button" id="eCancel">Abbrechen</button><button type="submit" class="primary">Speichern</button></div>
 </form></dialog>
 
@@ -1028,7 +1028,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '58557f769b';
+  const BUILD = '73387bfa80';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1116,11 +1116,11 @@ if (S.cockpit) {
     const card = (lbl, val, sub, tab, tone) => '<button class="kpi ' + (tone || '') + '" data-go="' + tab + '"><span class="kl">' + lbl + '</span><span class="kv">' + val + '</span><span class="ks">' + sub + '</span></button>';
     $('kpis').innerHTML =
       // Braucht dich = offene Mails, die Buddy als "needs" eingeordnet hat (laufend aktualisiert, "Erledigt ✓" zählt sofort); ohne Einordnung: Punkte aus der Lage
-      (st.triageDate ? card('Braucht dich', needsMail, 'offene Punkte, Buddy-Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }), 'mails', needsMail ? 'hot' : '')
+      (st.triageDate ? card('Braucht dich', needsMail, 'Mails, die dich brauchen' + (st.lageGh ? ' · Lage: ' + ((st.lageGh.split(/\n## /).find(x => /^Braucht dich/.test(x)) || '').match(/^\d+\.\s/gm) || []).length + ' Punkte' : '') + ' · Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }), 'mails', needsMail ? 'hot' : '')
         : card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : ''))
       + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'heute', '')
       + card('Posteingang', unread + ' ungelesen', (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : ''), 'mails', needsMail ? 'hot' : '')
-      + card('Tasks', vis.length, dueSoon + ' fällig in 7 Tagen', 'tasks', dueSoon ? 'warm' : '');
+      + card('Tasks', vis.length, (() => { const tdy = new Date().toLocaleDateString('sv-SE'); const ov = vis.filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') < tdy).length; return (ov ? ov + ' überfällig, ' : '') + (dueSoon - ov) + ' fällig in 7 Tagen'; })(), 'tasks', dueSoon ? 'warm' : '');
   }
   function nextEvent() {
     const now = new Date().toTimeString().slice(0, 5);
@@ -1134,8 +1134,8 @@ if (S.cockpit) {
     const useGh = st.useGh = !!(st.lageGh && st.triageDate && (!st.briefTime || Date.parse(st.triageDate) > Date.parse(st.briefTime)));
     const ghWhen = useGh ? new Date(st.triageDate).toLocaleString('de-CH', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '';
     let b = '<section class="card"><div class="ch"><h2>Lage</h2><span class="cs">' + (useGh ? 'Aktualisiert von Buddy ' + esc(ghWhen) : (st.briefDate ? esc(st.briefTitle || 'Briefing') + ' ' + bWhen + (st.briefDate === t ? since : ' · heutige Lage fehlt noch') : '')) + '</span>'
-      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (useGh ? st.triageDate.slice(0, 10) : (st.briefDate || t)) + ' ab. ')) + '" target="_blank" rel="noopener">Mit Buddy besprechen</a></div>';
-    b += useGh ? '<div class="md">' + md(st.lageGh, true) + '</div>'
+      + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, ich arbeite gerade die Lage vom ' + (useGh ? st.triageDate.slice(0, 10) : (st.briefDate || t)) + ' ab. ')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der die Lage kennt">Neuer Chat zur Lage</a></div>';
+    b += useGh ? '<div class="md">' + md(st.lageGh.replace(/\n## Termine heute[\s\S]*$/, ''), true) + '</div>'   // Termine stehen rechts in der eigenen Karte
       : st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
     let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
@@ -1147,7 +1147,8 @@ if (S.cockpit) {
     // Fällige Tasks
     const in7 = new Date(); in7.setDate(in7.getDate() + 7); const lim = in7.toLocaleDateString('sv-SE');
     const due = model ? C.view(model).flatMap(p => p.visible.map(x => Object.assign({ panel: p.name, color: p.color }, x))).filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') <= lim).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1) : [];
-    let d = '<section class="card"><div class="ch"><h2>Fällig in 7 Tagen</h2><span class="cs">' + due.length + ' Tasks</span></div>';
+    const tdy = new Date().toLocaleDateString('sv-SE'), over = due.filter(x => field(x.line, 'due') < tdy).length;
+    let d = '<section class="card"><div class="ch"><h2>Überfällig und fällig in 7 Tagen</h2><span class="cs">' + (over ? over + ' überfällig · ' : '') + (due.length - over) + ' bald fällig</span></div>';
     d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
     d += '</section>';
@@ -1317,7 +1318,7 @@ if (S.cockpit) {
       + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
       + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung öffnen">Bestehender Chat „' + esc(n) + '“ ↗</a>'
           : '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '" title="Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste">Bestehender Chat „' + esc(n) + '“ ↗</a>'; }).join('')
-      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Mit Buddy ↗</a></div>').join('') : '';
+      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Neuer Chat zum Thema ↗</a></div>').join('') : '';
     const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
     $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, nimm diesen Link in die Cockpit-Linkliste auf: ')) + '" target="_blank" rel="noopener">Link aufnehmen lassen</a></div>'
@@ -1371,7 +1372,7 @@ if (S.cockpit) {
       + (x.link || x.evidence ? ' Quelle: ' + (x.link || x.evidence) + '.' : '')
       + ' Lies zuerst die Quelle und tasks/board.md. Was du daraus ins Board übernimmst oder verwirfst, trägst du mit dieser ID in knowledge/cockpit/decisions.json ein, damit das Cockpit den Vorschlag ausblendet.'
       + ' Mein Auftrag dazu: ';
-    return '<a class="btn ghost" href="' + esc(buddyUrl(ctx)) + '" target="_blank" rel="noopener">Mit Buddy</a>';
+    return '<a class="btn ghost" href="' + esc(buddyUrl(ctx)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy zu diesem Vorschlag, dein Auftrag am Ende ergänzen">Neuer Chat zum Vorschlag</a>';
   }
   function pollGh() { if (st.pollT) return; st.pollT = setTimeout(async () => { st.pollT = null; await loadAll(); if (pending()) pollGh(); }, 20e3); }
   async function afterGh() {   // Lauf fertig: Issue schliessen, gesendete Mails ins Board spiegeln (mit Sicherung über commit)
