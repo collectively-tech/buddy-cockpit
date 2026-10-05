@@ -614,6 +614,12 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
+    async createReplyAllDraft(messageId, text) {   // Allen antworten, NUR als Entwurf
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReplyAll', JSON.stringify({ comment: text || '' }), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
+      const d = await r.json(); return { id: d.id, webLink: d.webLink };
+    },
     async createForwardDraft(messageId, to, text) {   // Weiterleitung NUR als Entwurf anlegen (mit Anhängen), Senden macht Chris in Outlook
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
       if (!/^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i.test(to || '')) throw new Error('Ungültige Empfängeradresse');
@@ -1028,7 +1034,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '73387bfa80';
+  const BUILD = '7299431160';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1183,6 +1189,7 @@ if (S.cockpit) {
       if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = triageOf(m);
         return '<span class="lact"><span class="laf">' + esc(fromOf(m)) + ':</span>'
           + '<a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a>'
+          + (S.createReplyDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="0" title="Leere Antwort als Entwurf in Outlook öffnen">Antworten ↗</button>' : '') + (S.createReplyAllDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="1" title="Leere Antwort an alle als Entwurf in Outlook öffnen">Allen antworten ↗</button>' : '')
           + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
           + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>'
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
@@ -1234,6 +1241,8 @@ if (S.cockpit) {
       + (tr.forwardTo ? '<div class="ma">' + fwdBlock(m, tr) + '</div>' : '')
       + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.', true)
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
+      + (S.createReplyDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="0" title="Leere Antwort an den Absender als Entwurf anlegen und in Outlook öffnen (nicht gesendet)">Antworten ↗</button>' : '')
+      + (S.createReplyAllDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="1" title="Leere Antwort an alle als Entwurf anlegen und in Outlook öffnen (nicht gesendet)">Allen antworten ↗</button>' : '')
       + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>' : '')
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
@@ -1399,6 +1408,16 @@ if (S.cockpit) {
     if (mdn) { const m = st.mails.find(x => x.id === (mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
       await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
       kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
+    const mr = e.target.closest('[data-mrep]');
+    if (mr) { const m = st.mails.find(x => x.id === mr.dataset.mrep); if (!m) return; const all = mr.dataset.all === '1'; const key = (all ? 'replyall:' : 'reply:') + m.internetMessageId;
+      const prev = st.dec[key] && st.dec[key].link; if (prev) { window.open(prev, 'outlook'); return; }
+      const win = window.open('', 'outlook');   // sofort öffnen (Popup-Blocker), Ziel nach dem Anlegen setzen
+      mr.disabled = true; const lbl = mr.textContent; mr.textContent = 'Lege Entwurf an …';
+      try { const d = all ? await S.createReplyAllDraft(m.id, '') : await S.createReplyDraft(m.id, '');
+        if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
+        await decide(key, 'created', { link: d.webLink }); toast((all ? 'Antwort an alle' : 'Antwort') + ' liegt als Entwurf in Outlook offen (nicht gesendet)');
+      } catch (err) { if (win) win.close(); setStatus(err.message, 'err'); }
+      mr.disabled = false; mr.textContent = lbl; return; }
     const mf = e.target.closest('[data-mfwd]');
     if (mf) { const m = st.mails.find(x => x.id === mf.dataset.mfwd); if (!m) return; const tr = triageOf(m); if (!tr.forwardTo) return;
       mf.disabled = true; mf.textContent = 'Lege Weiterleitung an …';
