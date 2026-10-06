@@ -1048,7 +1048,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '4a96273a2f';
+  const BUILD = '7d6902667e';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1110,9 +1110,11 @@ if (S.cockpit) {
   document.addEventListener('click', e => { const a = e.target.closest('a[data-copy]'); if (!a) return;
     const viaShortcut = !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
     if (viaShortcut) e.preventDefault();
-    const go = ok => { if (viaShortcut) { openUrl('shortcuts://run-shortcut?name=' + encodeURIComponent('Buddy einfügen') + '&input=text&text=' + encodeURIComponent(a.getAttribute('href'))); toast(ok ? 'Chat wird geöffnet, Punkt und Mails werden eingefügt. Nur noch Enter drücken.' : 'Kopieren ging nicht, der Chat öffnet trotzdem.'); }
+    const go = ok => { if (viaShortcut) toast(ok ? 'Chat wird geöffnet, Punkt und Mails werden eingefügt. Nur noch Enter drücken.' : 'Kopieren ging nicht, der Chat öffnet trotzdem.');
       else toast(ok ? 'Punkt und Mails kopiert: im Chat einfügen und senden.' : 'Kopieren ging nicht. Bitte den Punkt im Chat kurz nennen.'); };
-    try { navigator.clipboard.writeText(a.dataset.copy).then(() => go(true), () => go(false)); } catch (err) { go(false); } });
+    try { navigator.clipboard.writeText(a.dataset.copy).then(() => go(true), () => go(false)); } catch (err) { go(false); }
+    // sofort im Klick starten (nicht erst nach dem Kopieren), sonst blockiert der Browser das Öffnen des Kurzbefehls; der Kurzbefehl wartet 2 s vor dem Einfügen
+    if (viaShortcut) openUrl('shortcuts://run-shortcut?name=' + encodeURIComponent('Buddy einfügen') + '&input=text&text=' + encodeURIComponent(a.getAttribute('href'))); });
   function topicChips(th, context, noNew) {   // noNew: Zeile hat schon einen eigenen „Mit Buddy“-Knopf
     if (!th) return '';
     const proj = st.themen && st.themen.buddyProject;
