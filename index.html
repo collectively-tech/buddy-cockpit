@@ -1039,7 +1039,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '946d0f7555';
+  const BUILD = '48ce8598b1';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1192,7 +1192,7 @@ if (S.cockpit) {
       // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
       const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1)).slice(0, 3);   // neueste zuerst
       if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = triageOf(m);
-        return '<span class="lact"><span class="laf" title="' + esc(m.subject || '') + '">' + esc(fromOf(m)) + ' · ' + esc(whenOf(m.receivedDateTime)) + (ms.length > 1 ? ' · ' + esc((m.subject || '').slice(0, 40)) : '') + ':</span>'
+        return '<span class="lact"><span class="laf" title="' + esc(m.subject || '') + '">' + esc(fromOf(m)) + ' · ' + esc(whenOf(m.receivedDateTime)) + (ms.length > 1 ? ' · ' + esc((m.subject || '').slice(0, 40).trim()) : '') + ':</span>'
           + '<a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a>'
           + (S.createReplyDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="0" title="Leere Antwort als Entwurf in Outlook öffnen">Antworten ↗</button>' : '') + (S.createReplyAllDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="1" title="Leere Antwort an alle als Entwurf in Outlook öffnen">Allen antworten ↗</button>' : '')
           + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
