@@ -710,7 +710,7 @@ function linkKind(u) {
   if (/sharepoint\.com|onedrive|1drv\.ms/i.test(u)) return ['file', 'Datei'];
   return ['', 'Link'];
 }
-function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="' + (k[0] === 'mail' ? 'outlook' : '_blank') + '" rel="noopener">' + k[1] + ' ↗</a>'; }).join(''); }
+function chipsHtml(l) { return linksOf(l).map(u => { const k = linkKind(u); const mm = k[0] === 'mail' && window.mailMeta ? window.mailMeta(u) : null; return '<a class="chip ' + k[0] + '" href="' + esc(u) + '" target="' + (k[0] === 'mail' ? 'outlook' : '_blank') + '" rel="noopener"' + (mm ? ' title="' + esc(mm.from + ': ' + (mm.subject || '')) + '"' : '') + '>' + k[1] + (mm ? ' ' + esc(mm.short) : '') + ' ↗</a>'; }).join(''); }
 function buddyUrl(text) {
   // Desktop: neue Cowork-Sitzung in der Claude-App mit Ordner AI-CoS (Buddy mit Dateizugriff); Handy: claude.ai
   const mobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
@@ -937,6 +937,11 @@ if (S.cockpit) {
     return j;
   }
   const fromOf = m => m.from && m.from.emailAddress ? (m.from.emailAddress.name || m.from.emailAddress.address) : '';
+  // Datum und Uhrzeit überall, wo eine Mail erwähnt oder verlinkt ist (Chris 06.10.)
+  const whenOf = iso => { const d = new Date(iso); const s = d.toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }).replace(',', ''); return d.getFullYear() === new Date().getFullYear() ? s : s.replace(/^(\d\d\.\d\d)\./, '$1.' + String(d.getFullYear()).slice(2) + ' '); };
+  const itemIdOf = u => { const m = /[?&]ItemID=([^&]+)/i.exec(u || ''); try { return m ? decodeURIComponent(m[1]) : null; } catch (e) { return m ? m[1] : null; } };
+  window.mailMeta = u => { const id = itemIdOf(u); const m = id && st.mails.find(x => itemIdOf(x.webLink) === id); return m ? { short: whenOf(m.receivedDateTime), from: fromOf(m), subject: m.subject || '' } : null; };
+  const mailChipLabel = (u, base) => { const mm = window.mailMeta(u); return '<a class="chip mail" href="' + esc(u) + '" target="outlook"' + (mm ? ' title="' + esc(mm.from + ': ' + mm.subject) + '"' : '') + '>' + base + (mm ? ' ' + esc(mm.short) : '') + ' ↗</a>'; };
 
   // ---- Mini-Markdown (Briefing, Links) ----
   function inline(s) {
@@ -1034,7 +1039,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '7299431160';
+  const BUILD = '946d0f7555';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1172,10 +1177,10 @@ if (S.cockpit) {
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span><span class="sa">'
-          + (x.link ? '<a class="chip mail" href="' + esc(x.link) + '" target="outlook">Mail ↗</a>' : '')
+          + (x.link ? mailChipLabel(x.link, 'Mail') : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.', true) + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</span></div>').join('')
         + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span><span class="sa">'
-          + (x.evidence && /^https?:/.test(x.evidence) ? '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>' : '')
+          + (x.evidence && /^https?:/.test(x.evidence) ? (itemIdOf(x.evidence) ? mailChipLabel(x.evidence, 'Beleg') : '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>') : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.', true) + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</span></div>').join('')
         + '</section>';
     }
@@ -1185,9 +1190,9 @@ if (S.cockpit) {
       if (!linked.length) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
       li.dataset.mids = linked.map(x => x.id).join('\n'); li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
       // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
-      const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).slice(0, 3);
+      const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1)).slice(0, 3);   // neueste zuerst
       if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = triageOf(m);
-        return '<span class="lact"><span class="laf">' + esc(fromOf(m)) + ':</span>'
+        return '<span class="lact"><span class="laf" title="' + esc(m.subject || '') + '">' + esc(fromOf(m)) + ' · ' + esc(whenOf(m.receivedDateTime)) + (ms.length > 1 ? ' · ' + esc((m.subject || '').slice(0, 40)) : '') + ':</span>'
           + '<a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a>'
           + (S.createReplyDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="0" title="Leere Antwort als Entwurf in Outlook öffnen">Antworten ↗</button>' : '') + (S.createReplyAllDraft ? '<button data-mrep="' + esc(m.id) + '" data-all="1" title="Leere Antwort an alle als Entwurf in Outlook öffnen">Allen antworten ↗</button>' : '')
           + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
@@ -1228,7 +1233,7 @@ if (S.cockpit) {
   function mailRow(m) {
     const tr = triageOf(m);
     const when = new Date(m.receivedDateTime);
-    const w = when.toDateString() === new Date().toDateString() ? when.toTimeString().slice(0, 5) : when.toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit', year: '2-digit' });
+    const w = when.toDateString() === new Date().toDateString() ? 'heute ' + when.toTimeString().slice(0, 5) : whenOf(m.receivedDateTime);
     const linked = tasksForMail(m);
     return '<div class="mail' + (m.isRead ? '' : ' unread') + '" data-mid="' + esc(m.id) + '">'
       + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + w + '</span></div>'
