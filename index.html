@@ -1048,7 +1048,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '7d6902667e';
+  const BUILD = '2d8f079720';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1108,10 +1108,10 @@ if (S.cockpit) {
   // Bestehender Chat + Punkt: Text in die Zwischenablage, dann Mac-Kurzbefehl „Buddy einfügen“ (öffnet den Chat, fügt ein; Chris drückt Enter)
   const openUrl = u => (window.cockpitOpenUrl ? window.cockpitOpenUrl(u) : (window.location.href = u));
   document.addEventListener('click', e => { const a = e.target.closest('a[data-copy]'); if (!a) return;
-    const viaShortcut = !/iPhone|iPad|iPod|Android/i.test(navigator.userAgent || '');
+    const viaShortcut = false;   // Mac-Kurzbefehl verworfen (06.10.): macOS blockiert den Tastendruck; Link öffnet den Chat direkt, Text liegt in der Zwischenablage
     if (viaShortcut) e.preventDefault();
     const go = ok => { if (viaShortcut) toast(ok ? 'Chat wird geöffnet, Punkt und Mails werden eingefügt. Nur noch Enter drücken.' : 'Kopieren ging nicht, der Chat öffnet trotzdem.');
-      else toast(ok ? 'Punkt und Mails kopiert: im Chat einfügen und senden.' : 'Kopieren ging nicht. Bitte den Punkt im Chat kurz nennen.'); };
+      else toast(ok ? 'Chat öffnet sich, Punkt und Mails sind kopiert: dort Cmd+V und Enter.' : 'Kopieren ging nicht. Bitte den Punkt im Chat kurz nennen.'); };
     try { navigator.clipboard.writeText(a.dataset.copy).then(() => go(true), () => go(false)); } catch (err) { go(false); }
     // sofort im Klick starten (nicht erst nach dem Kopieren), sonst blockiert der Browser das Öffnen des Kurzbefehls; der Kurzbefehl wartet 2 s vor dem Einfügen
     if (viaShortcut) openUrl('shortcuts://run-shortcut?name=' + encodeURIComponent('Buddy einfügen') + '&input=text&text=' + encodeURIComponent(a.getAttribute('href'))); });
@@ -1235,7 +1235,7 @@ if (S.cockpit) {
       const tc = li.querySelector('.tchips'), pr = li.dataset.prompt;
       if (tc && pr) {
         if (li.querySelector('.lacts')) tc.querySelector('.tth').insertAdjacentHTML('afterend', '<a class="chip" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">Neuer Chat zu diesem Punkt ↗</a>');
-        tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und fügt Punkt und Mails ein (Kurzbefehl „Buddy einfügen“). Nur noch Enter drücken.'; });
+        tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
   }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
