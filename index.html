@@ -141,6 +141,9 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .acts{ display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; } .acts .sp{ flex:1; }
 .lhint{ font-size:11.5px; color:var(--ink3); margin-top:4px; }
 .toast{ position:fixed; left:50%; bottom:20px; transform:translateX(-50%); background:var(--ink); color:var(--bg); font-size:13px; padding:10px 14px; border-radius:10px; display:none; gap:12px; align-items:center; z-index:9; max-width:90vw; }
+.filebar{ position:fixed; left:50%; bottom:64px; transform:translateX(-50%); background:var(--card); border:1px solid var(--line2); box-shadow:0 4px 16px rgba(16,24,40,.15); font-size:13px; padding:10px 12px; border-radius:12px; display:none; gap:8px; align-items:center; flex-wrap:wrap; z-index:9; max-width:92vw; }
+.filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
+.prow.paused{ opacity:.7; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
 .foot{ margin-top:18px; color:var(--ink3); font-size:11.5px; line-height:1.5; }
 .mv{ display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
@@ -608,7 +611,13 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Schreiben fehlgeschlagen (' + r.status + ')');
       return true;
     },
-    async createReplyDraft(messageId, text) {   // EINZIGER Schreibzugriff aufs Postfach: Antwort-Entwurf anlegen. Kein Senden, Löschen, Verschieben im Code.
+    async moveMessage(messageId, folderId) {   // Mail in einen Ordner verschieben (Chris 06.10.: verschieben ja, senden nein). Nur auf Klick, nie automatisch. Kein Löschen.
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(folderId)) throw new Error('Ungültige ID');
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/move', JSON.stringify({ destinationId: folderId }), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Verschieben fehlgeschlagen (' + r.status + ')');
+      const d = await r.json(); return { id: d.id, webLink: d.webLink };
+    },
+    async createReplyDraft(messageId, text) {   // Schreibzugriffe aufs Postfach: nur Entwürfe anlegen und (auf Klick) verschieben. Kein Senden, kein Löschen im Code.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
       const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: text }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
@@ -996,7 +1005,7 @@ if (S.cockpit) {
     const [box, all] = await Promise.all([
       S.api('/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount'),
       S.apiAll('/me/mailFolders/inbox/messages?$top=100&$orderby=receivedDateTime desc'
-        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag')
+        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag,conversationId')
     ]);
     st.inbox = box; st.mails = all;
     st.triage = {}; st.triageDate = null;
@@ -1039,7 +1048,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ab9a45fdf1';
+  const BUILD = '179e81e294';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1324,7 +1333,7 @@ if (S.cockpit) {
     let h = '<section class="card" style="--c:' + esc(p ? p.color : '#15803d') + '"><div class="ch"><h2>Portfolio-Tasks</h2><span class="cs">' + rows.length + ' offene Punkte, nach Frist</span>'
       + (st.registerUrl && !st.pf ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
     h += rows.length ? rows.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); const d = field(t.line, 'due');
-      return '<div class="prow" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
+      return '<div class="prow' + (t.line.status === 'hold' ? ' paused' : '') + '" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
     $('v-portfolio').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
   }
   function paintLinks() {
@@ -1404,6 +1413,73 @@ if (S.cockpit) {
       if (okay) await decide(id, 'applied');
     }
   }
+  // ---- Mail ablegen (Chris 06.10.): nach Antworten/Erledigt fragen, ob und wohin verschieben. Nur Kopfdaten (Ordner-ID), nie Mail-Inhalte. ----
+  const SYS_FOLDERS = ['inbox', 'sentitems', 'drafts', 'deleteditems', 'junkemail', 'outbox', 'archive'];
+  async function loadFolders() {
+    if (st.folders) return st.folders;
+    const sys = {}; await Promise.all(SYS_FOLDERS.map(n => S.api('/me/mailFolders/' + n + '?$select=id').then(f => { sys[f.id] = n; }).catch(() => {})));
+    const out = [];
+    async function walk(url, prefix, depth) {
+      const list = await S.apiAll(url, null, 500).catch(() => []);
+      for (const f of list) {
+        const path = prefix ? prefix + ' / ' + f.displayName : f.displayName;
+        if (!sys[f.id] || sys[f.id] === 'inbox' || sys[f.id] === 'archive') { if (!sys[f.id] || sys[f.id] === 'archive') out.push({ id: f.id, name: path }); }
+        if (f.childFolderCount && depth < 4 && sys[f.id] !== 'deleteditems' && sys[f.id] !== 'junkemail') await walk('/me/mailFolders/' + f.id + '/childFolders?$top=100&$select=id,displayName,childFolderCount', path, depth + 1);
+      }
+    }
+    await walk('/me/mailFolders?$top=100&$select=id,displayName,childFolderCount', '', 0);
+    st.folders = out.sort((a, b) => a.name.localeCompare(b.name, 'de')); st.sysFolders = sys; return st.folders;
+  }
+  async function folderHints(m) {
+    const folders = await loadFolders(); const byId = new Map(folders.map(f => [f.id, f])); const score = new Map();
+    const add = (id, w) => { if (byId.has(id)) score.set(id, (score.get(id) || 0) + w); };
+    const q = s => encodeURIComponent(String(s).replace(/'/g, "''"));
+    const [conv, snd] = await Promise.all([
+      m.conversationId ? S.apiAll("/me/messages?$filter=conversationId eq '" + q(m.conversationId) + "'&$select=parentFolderId&$top=50", null, 50).catch(() => []) : [],
+      m.from && m.from.emailAddress && m.from.emailAddress.address ? S.apiAll("/me/messages?$filter=from/emailAddress/address eq '" + q(m.from.emailAddress.address) + "'&$select=parentFolderId&$top=50", null, 50).catch(() => []) : []
+    ]);
+    conv.forEach(x => add(x.parentFolderId, 10)); snd.forEach(x => add(x.parentFolderId, 2));
+    const th = topicOf(m.subject || ''); const txt = ((m.subject || '') + ' ' + (th ? th.title : '')).toLowerCase();
+    folders.forEach(f => { const leaf = f.name.split(' / ').pop().toLowerCase(); if (leaf.length >= 3 && txt.includes(leaf)) add(f.id, 5); });
+    return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => byId.get(id));
+  }
+  function fileBar() { let b = document.getElementById('fileBar'); if (!b) { b = document.createElement('div'); b.id = 'fileBar'; b.className = 'filebar'; document.body.appendChild(b); } return b; }
+  async function offerFile(m) {
+    if (!S.moveMessage) return;
+    const b = fileBar(); b.dataset.mid = m.id;
+    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span><span class="fbl">Suche passende Ordner …</span><button data-fkeep="1">In Inbox lassen</button>';
+    b.style.display = 'flex';
+    let hints = [], all = [];
+    try { [hints, all] = await Promise.all([folderHints(m), loadFolders()]); } catch (e) { hints = []; }
+    if (b.dataset.mid !== m.id) return;
+    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span>'
+      + hints.map(f => '<button class="primary" data-fmove="' + esc(f.id) + '" title="' + esc(f.name) + '">' + esc(f.name.split(' / ').pop()) + '</button>').join('')
+      + (hints.length ? '' : '<span class="fbl">Kein Vorschlag aus früheren Mails.</span>')
+      + '<select data-fpick="1"><option value="">Anderer Ordner …</option>' + all.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + '</select>'
+      + '<button data-fkeep="1">In Inbox lassen</button>';
+  }
+  async function doMove(mid, fid) {
+    const m = st.mails.find(x => x.id === mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
+    const b = fileBar(); b.querySelectorAll('button,select').forEach(x => { x.disabled = true; });
+    try { const r = await S.moveMessage(m.id, f.id);
+      st.mails = st.mails.filter(x => x !== m); if (st.inbox && st.inbox.totalItemCount) st.inbox.totalItemCount--;
+      b.style.display = 'none'; kpis(); paintMails(); paintHeute();
+      decide('file:' + m.internetMessageId, 'moved', { folder: f.name, subject: m.subject || '' });
+      toast('Verschoben nach „' + f.name + '“', async () => {
+        try { const inboxId = Object.keys(st.sysFolders || {}).find(k => st.sysFolders[k] === 'inbox') || 'inbox';
+          const back = await S.moveMessage(r.id, inboxId); m.id = back.id; if (back.webLink) m.webLink = back.webLink; st.mails.push(m);
+          st.mails.sort((a, c) => c.receivedDateTime.localeCompare(a.receivedDateTime)); if (st.inbox) st.inbox.totalItemCount++;
+          decide('file:' + m.internetMessageId, 'undone'); kpis(); paintMails(); paintHeute(); toast('Zurück in der Inbox.');
+        } catch (e) { setStatus('Zurückholen fehlgeschlagen: ' + e.message, 'err'); } });
+    } catch (e) { b.querySelectorAll('button,select').forEach(x => { x.disabled = false; }); setStatus(e.message, 'err'); }
+  }
+  document.addEventListener('click', e => {
+    const fm = e.target.closest('[data-fmove]'), fk = e.target.closest('[data-fkeep]');
+    if (fm) doMove(fileBar().dataset.mid, fm.dataset.fmove);
+    if (fk) fileBar().style.display = 'none';
+  });
+  document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
+
   function findTaskByTitle(title) {
     const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
     return t ? C.keyOf(model, t.idx) : null;
@@ -1412,7 +1488,7 @@ if (S.cockpit) {
     const mdn = e.target.closest('[data-mdone],[data-mundo]');
     if (mdn) { const m = st.mails.find(x => x.id === (mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
       await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
-      kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); return; }
+      kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); if (mdn.dataset.mdone) offerFile(m); return; }
     const mr = e.target.closest('[data-mrep]');
     if (mr) { const m = st.mails.find(x => x.id === mr.dataset.mrep); if (!m) return; const all = mr.dataset.all === '1'; const key = (all ? 'replyall:' : 'reply:') + m.internetMessageId;
       const prev = st.dec[key] && st.dec[key].link; if (prev) { window.open(prev, 'outlook'); return; }
@@ -1420,7 +1496,7 @@ if (S.cockpit) {
       mr.disabled = true; const lbl = mr.textContent; mr.textContent = 'Lege Entwurf an …';
       try { const d = all ? await S.createReplyAllDraft(m.id, '') : await S.createReplyDraft(m.id, '');
         if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
-        await decide(key, 'created', { link: d.webLink }); toast((all ? 'Antwort an alle' : 'Antwort') + ' liegt als Entwurf in Outlook offen (nicht gesendet)');
+        await decide(key, 'created', { link: d.webLink }); toast((all ? 'Antwort an alle' : 'Antwort') + ' liegt als Entwurf in Outlook offen (nicht gesendet)'); offerFile(m);
       } catch (err) { if (win) win.close(); setStatus(err.message, 'err'); }
       mr.disabled = false; mr.textContent = lbl; return; }
     const mf = e.target.closest('[data-mfwd]');
