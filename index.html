@@ -1048,7 +1048,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '179e81e294';
+  const BUILD = '3785791ae3';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1099,6 +1099,14 @@ if (S.cockpit) {
     return (mobile ? 'https://claude.ai/' : 'claude://claude.ai/') + path;
   }
   const sessId = n => st.themen && st.themen.sessionIds ? st.themen.sessionIds[n] : null;
+  function pointPrompt(text, ms) {   // Lage-Punkt mit allen zugehörigen Mails als Auftrag an Buddy
+    const t = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 900);
+    return 'Buddy, Punkt aus der Lage im Cockpit (Stand ' + (st.triageDate ? whenOf(st.triageDate) : 'heute') + '): ' + t
+      + (ms.length ? ' Zugehörige Mails: ' + ms.map(m => fromOf(m) + ', ' + whenOf(m.receivedDateTime) + ', „' + (m.subject || '') + '“').join('; ') + '.' : '')
+      + ' Lies ' + (ms.length ? 'diese Mails' : 'die zugehörigen Mails') + ' im Volltext, prüf im Gesendet-Ordner, was ich darauf schon geantwortet habe, und schlag mir vor, wem ich was antworte (mit Entwürfen).';
+  }
+  document.addEventListener('click', e => { const a = e.target.closest('a[data-copy]'); if (!a) return;
+    try { navigator.clipboard.writeText(a.dataset.copy).then(() => toast('Punkt und Mails kopiert: im Chat mit Cmd+V einfügen und senden.'), () => toast('Kopieren ging nicht. Bitte den Punkt im Chat kurz nennen.')); } catch (err) { toast('Kopieren ging nicht. Bitte den Punkt im Chat kurz nennen.'); } });
   function topicChips(th, context, noNew) {   // noNew: Zeile hat schon einen eigenen „Mit Buddy“-Knopf
     if (!th) return '';
     const proj = st.themen && st.themen.buddyProject;
@@ -1197,6 +1205,8 @@ if (S.cockpit) {
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
       let linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
       if (!linked.length) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
+      { const all = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1));
+        li.dataset.prompt = pointPrompt(li.textContent.trim(), all); }
       li.dataset.mids = linked.map(x => x.id).join('\n'); li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
       // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
       const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1)).slice(0, 3);   // neueste zuerst
@@ -1211,7 +1221,14 @@ if (S.cockpit) {
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
           + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest und Antwort oder nächsten Schritt vorschlägt">Neuer Chat zu dieser Mail</a></span>'; }).join('') + '</div>');
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
-    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts'))); });
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (!li.dataset.prompt) li.dataset.prompt = pointPrompt(li.textContent.trim(), []); });
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts')));
+      // Punkt als Ganzes mit Buddy: neuer Chat mit Punkt + allen Mails, oder bestehender Chat (Text in die Zwischenablage, dort einfügen)
+      const tc = li.querySelector('.tchips'), pr = li.dataset.prompt;
+      if (tc && pr) {
+        if (li.querySelector('.lacts')) tc.querySelector('.tth').insertAdjacentHTML('afterend', '<a class="chip" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">Neuer Chat zu diesem Punkt ↗</a>');
+        tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat. Punkt und Mails sind dann kopiert: im Chat mit Cmd+V einfügen und senden.'; });
+      } });
   }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
   const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche'.split(' '));
