@@ -177,6 +177,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 
 <div class="bar" id="bar" style="display:none">
   <input type="search" id="q" placeholder="Suchen (Titel, Notiz, Tags)">
+  <button id="btnHold" title="On-Hold-Tasks ein- oder ausblenden">On-Hold zeigen</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -681,6 +682,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
+let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const S = window.TBStore;
@@ -766,10 +768,10 @@ function render() {
   keys.clear();
   const q = $('q').value.trim().toLowerCase();
   const panels = C.view(model);
-  let total = 0, arch = 0;
+  let total = 0, arch = 0, holdN = 0;
   const html = panels.map((p, pi) => {
-    const vis = p.visible.filter(t => matches(t.line, q));
-    total += p.visible.length; arch += p.archived.length;
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold'));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length;
     const rows = vis.map(t => {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
@@ -794,18 +796,20 @@ function render() {
     }
     if (q && !vis.length && !ar) return '';
     return '<div class="panel" style="--c:' + esc(p.color) + '" data-panel="' + esc(p.name) + '">'
-      + '<div class="head" draggable="true" data-ph="' + esc(p.name) + '"><span class="name">' + esc(p.name) + '</span><span class="cnt">' + p.visible.length + '</span>'
+      + '<div class="head" draggable="true" data-ph="' + esc(p.name) + '"><span class="name">' + esc(p.name) + '</span><span class="cnt">' + (showHold ? p.visible.length : p.visible.filter(t => t.line.status !== 'hold').length) + '</span>'
       + '<button class="pm" title="Panel bearbeiten" data-pedit="' + esc(p.name) + '">⋯</button></div>'
       + rows + ar + '<div class="addrow" data-drop-end="' + esc(p.name) + '"><input placeholder="+ Task hinzufügen (Enter)" data-add="' + esc(p.name) + '"></div></div>';
   }).join('');
   $('grid').innerHTML = html;
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
-  $('foot').textContent = total + ' offene Aufgaben · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
+  $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
+  $('foot').textContent = total + ' offene Aufgaben' + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold || q ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
   if (onRender) onRender();
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
+$('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
 // ---------- Klicks ----------
 $('grid').addEventListener('click', e => {
@@ -1077,7 +1081,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '74fe04f2ed';
+  const BUILD = '8f8ab05cc1';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
