@@ -1055,7 +1055,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '4941980373';
+  const BUILD = 'e161c645f2';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1204,7 +1204,7 @@ if (S.cockpit) {
       const refresh = !ghTok()
         ? '<span class="ghset"><input id="ghTokIn" type="password" placeholder="GitHub-Schlüssel (einmalig)" autocomplete="off"><button class="btn" id="btnGhTok">Speichern</button></span>'
         : pending()
-          ? '<span class="cs" id="sugReq">' + (since > 10 ? 'Läuft seit ' + hmOf(ghReq()) + ', noch kein Ergebnis. Routine „Cockpit aktualisieren“ in Claude prüfen.' : 'Buddy aktualisiert (seit ' + hmOf(ghReq()) + '), Ergebnis in 2 bis 4 Min., Cockpit lädt selbst neu') + '</span>'
+          ? '<span class="cs" id="sugReq">' + (since > 10 ? 'Kein Ergebnis vom Lauf ' + hmOf(ghReq()) + '.' : 'Buddy aktualisiert (seit ' + hmOf(ghReq()) + '), Ergebnis in 2 bis 4 Min., Cockpit lädt selbst neu') + '</span>' + (since > 10 ? '<button class="btn" id="btnSugRefresh" title="Startet Buddys Routine nochmals, der alte Auftrag wird geschlossen.">Nochmals starten ↻</button>' : '')
           : '<button class="btn" id="btnSugRefresh" title="Startet sofort Buddys Routine (Claude-Abo). Ergebnis nach 2 bis 4 Minuten, das Cockpit lädt dann selbst neu.">Aktualisieren ↻</button>';
       v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
@@ -1569,6 +1569,8 @@ if (S.cockpit) {
       try { await gh('GET', ''); setStatus('GitHub verbunden.', 'ok'); loadAll(); } catch (err) { setStatus('Schlüssel geht nicht: ' + err.message, 'err'); lsSet('cockpit-gh-token', ''); paintHeute(); } return; }
     if (!e.target.closest('#btnSugRefresh')) return;
     const now = new Date().toISOString();
+    const old = lsGet('cockpit-gh-issue');
+    if (old) { try { await gh('PATCH', '/issues/' + old, { state: 'closed' }); } catch (e) { /* harmlos */ } lsSet('cockpit-gh-issue', ''); }
     try { const iss = await gh('POST', '/issues', { title: 'Aktualisieren ' + new Date().toLocaleString('de-CH'), body: 'Aus dem Buddy Cockpit.' });
       lsSet('cockpit-gh-req', now); lsSet('cockpit-gh-issue', String(iss.number)); setStatus('Buddy aktualisiert, Ergebnis in 2 bis 4 Minuten.', 'ok'); paintHeute(); pollGh(); }
     catch (err) { setStatus('Aktualisieren nicht gestartet: ' + err.message, 'err'); }
