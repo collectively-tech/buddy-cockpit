@@ -1081,7 +1081,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ebb6a2f155';
+  const BUILD = '0b7ac3d8d7';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1185,13 +1185,13 @@ if (S.cockpit) {
     if (st.unreadOnly === undefined) st.unreadOnly = !!lsGet('cockpit-unread');
     // angewählte Box = was gerade angezeigt wird (Chris 09.10.): Mails+Ungelesen-Filter → Posteingang, Mails nach Klick auf „Braucht dich“ → Braucht dich, Tasks → Tasks
     const curTab = lsGet('cockpit-tab') || 'heute';
-    const sel = curTab === 'mails' ? (st.unreadOnly ? 'unread' : st.needsSel ? 'needs' : '') : curTab === 'tasks' ? 'tasks' : '';
+    const sel = curTab === 'mails' ? (st.unreadOnly ? 'unread' : st.needsSel ? 'needs' : '') : curTab === 'tasks' ? 'tasks' : curTab === 'heute' && st.termSel ? 'termine' : '';
     const card = (lbl, val, sub, tab, tone) => '<button class="kpi ' + (tone || '') + (tab === sel ? ' on' : '') + '" aria-pressed="' + (tab === sel) + '" data-go="' + tab + '"><span class="kl">' + lbl + '</span><span class="kv">' + val + '</span><span class="ks">' + sub + '</span></button>';
     $('kpis').innerHTML =
       // Braucht dich = offene Mails, die Buddy als "needs" eingeordnet hat (laufend aktualisiert, "Erledigt ✓" zählt sofort); ohne Einordnung: Punkte aus der Lage
       (st.triageDate ? card('Braucht dich', needsMail, 'Mails, die dich brauchen' + (st.lageGh ? ' · Lage: ' + ((st.lageGh.split(/\n## /).find(x => /^Braucht dich/.test(x)) || '').match(/^\d+\.\s/gm) || []).length + ' Punkte' : '') + ' · Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }), 'needs', needsMail ? 'hot' : '')
         : card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : ''))
-      + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'heute', '')
+      + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'termine', '')
       + card('Posteingang', unread + ' ungelesen', sel === 'unread' ? 'Filter aktiv · nochmals klicken zeigt alle' : (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : '') + ' · Klick zeigt die ungelesenen', 'unread', needsMail ? 'hot' : '')
       + card('Tasks', vis.length, (() => { const tdy = new Date().toLocaleDateString('sv-SE'); const ov = vis.filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') < tdy).length; return (ov ? ov + ' überfällig, ' : '') + (dueSoon - ov) + ' fällig in 7 Tagen'; })(), 'tasks', dueSoon ? 'warm' : '');
   }
@@ -1211,7 +1211,7 @@ if (S.cockpit) {
     b += useGh ? '<div class="md">' + md(st.lageGh.replace(/\n## Termine heute[\s\S]*$/, ''), true) + '</div>'   // Termine stehen rechts in der eigenen Karte
       : st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
-    let c = '<section class="card"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
+    let c = '<section class="card" id="secTermine"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
     if (st.err.cal) c += '<div class="errbox">Kalender nicht lesbar: ' + esc(st.err.cal) + '</div>';
     else if (!st.cal.length) c += '<div class="empty">Keine Termine heute.</div>';
     else { const now = new Date().toTimeString().slice(0, 5);
@@ -1712,6 +1712,7 @@ if (S.cockpit) {
     $('bar').style.display = tab === 'tasks' ? 'flex' : 'none';
     lsSet('cockpit-tab', tab); try { window.scrollTo(0, 0); } catch (e) { /* ohne Scroll */ }
     if (tab !== 'mails') st.needsSel = false;
+    st.termSel = false;
     if ($('kpis') && $('kpis').innerHTML) kpis();
   }
   $('tabs').innerHTML = TABS.map(([k, l]) => '<button data-tab="' + k + '">' + l + '</button>').join('') + '<span class="tsp"></span><button id="btnRefresh" class="rf" title="Alles neu laden">↻</button>';
@@ -1722,6 +1723,10 @@ if (S.cockpit) {
       lsSet('cockpit-open', JSON.stringify({ needs: true, neu: false, waiting: false, info: false, done: false, old: false }));   // nur „Braucht dich“ offen, alle anderen zu
       st.needsSel = true; setUnread(false); st.focus = null; st.attOnly = false; lsSet('cockpit-att', ''); st.mq = ''; if ($('mq')) $('mq').value = ''; go('mails'); paintMails(); kpis();
       const g = document.querySelector('#mlist details.g-needs'); if (g) { g.open = true; try { g.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (x) { /* alt */ } }
+      return; }
+    if (b.dataset.go === 'termine') {   // Termine heute: zu Heute, Termine-Karte in den Blick, Box angewählt
+      go('heute'); st.termSel = true; kpis();
+      const tc = $('secTermine'); if (tc) { try { tc.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (x) { /* alt */ } }
       return; }
     if (b.dataset.go !== 'unread') { go(b.dataset.go); return; }
     const onMails = $('v-mails') && $('v-mails').style.display !== 'none';
