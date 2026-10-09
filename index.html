@@ -145,6 +145,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
 .mfilter{ margin:0 0 8px; }
+.kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; }
 .lmove{ border-style:dashed; }
 .matt{ margin:6px 0 2px; font-size:12px; } .matt summary{ cursor:pointer; color:var(--ink2); } .arow{ display:flex; gap:8px; align-items:center; padding:3px 0; } .arow .an{ flex:1; min-width:0; overflow-wrap:anywhere; } .arow .as{ color:var(--ink2); font-size:11px; white-space:nowrap; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
@@ -1076,7 +1077,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '383779153b';
+  const BUILD = 'a899fa6ad1';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1177,13 +1178,14 @@ if (S.cockpit) {
     const dueSoon = vis.filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') <= lim).length;
     const needsMail = st.mails.filter(m => mailCat(m) === 'needs').length;
     const unread = st.inbox ? st.inbox.unreadItemCount : st.mails.filter(m => !m.isRead).length;
+    if (st.unreadOnly === undefined) st.unreadOnly = !!lsGet('cockpit-unread');
     const card = (lbl, val, sub, tab, tone) => '<button class="kpi ' + (tone || '') + '" data-go="' + tab + '"><span class="kl">' + lbl + '</span><span class="kv">' + val + '</span><span class="ks">' + sub + '</span></button>';
     $('kpis').innerHTML =
       // Braucht dich = offene Mails, die Buddy als "needs" eingeordnet hat (laufend aktualisiert, "Erledigt ✓" zählt sofort); ohne Einordnung: Punkte aus der Lage
       (st.triageDate ? card('Braucht dich', needsMail, 'Mails, die dich brauchen' + (st.lageGh ? ' · Lage: ' + ((st.lageGh.split(/\n## /).find(x => /^Braucht dich/.test(x)) || '').match(/^\d+\.\s/gm) || []).length + ' Punkte' : '') + ' · Stand ' + new Date(st.triageDate).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }), 'mails', needsMail ? 'hot' : '')
         : card('Braucht dich', st.needs, st.briefDate === today() ? 'aus Buddys Lage heute' : (st.briefDate ? 'Lage vom ' + fmtDue(st.briefDate) : 'keine Lage'), 'heute', st.needs ? 'hot' : ''))
       + card('Termine heute', st.cal.length, st.cal.length ? (nextEvent() || 'alle vorbei') : 'frei', 'heute', '')
-      + card('Posteingang', unread + ' ungelesen', (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : ''), 'mails', needsMail ? 'hot' : '')
+      + card('Posteingang', unread + ' ungelesen', st.unreadOnly ? 'Filter aktiv · nochmals klicken zeigt alle' : (st.inbox ? st.inbox.totalItemCount + ' total' : '') + (needsMail ? ' · ' + needsMail + ' für dich' : '') + ' · Klick zeigt die ungelesenen', 'unread', (needsMail ? 'hot' : '') + (st.unreadOnly ? ' on' : ''))
       + card('Tasks', vis.length, (() => { const tdy = new Date().toLocaleDateString('sv-SE'); const ov = vis.filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') < tdy).length; return (ov ? ov + ' überfällig, ' : '') + (dueSoon - ov) + ' fällig in 7 Tagen'; })(), 'tasks', dueSoon ? 'warm' : '');
   }
   function nextEvent() {
@@ -1372,7 +1374,7 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mfilter"><button id="btnUnread" class="' + (st.unreadOnly ? 'primary' : '') + '" aria-pressed="' + (st.unreadOnly ? 'true' : 'false') + '">' + (st.unreadOnly ? 'Nur ungelesene (' + nUnread + ') · alle zeigen' : 'Nur ungelesene (' + nUnread + ')') + '</button> <button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button></div>'
+    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button></div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
@@ -1381,7 +1383,7 @@ if (S.cockpit) {
       + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
       + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
       + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q || !!st.unreadOnly || !!st.attOnly));
-    $('btnUnread').onclick = () => { st.unreadOnly = !st.unreadOnly; lsSet('cockpit-unread', st.unreadOnly ? '1' : ''); paintMails(); };
+    if ($('btnUnread')) $('btnUnread').onclick = () => { setUnread(false); paintMails(); kpis(); };
     $('btnAtt').onclick = () => { st.attOnly = !st.attOnly; lsSet('cockpit-att', st.attOnly ? '1' : ''); paintMails(); };
   }
   // ---- Portfolio-Ansicht aus knowledge/cockpit/portfolio.json (erzeugt von operations/build-cockpit.py aus dem Register) ----
@@ -1706,7 +1708,12 @@ if (S.cockpit) {
   $('tabs').innerHTML = TABS.map(([k, l]) => '<button data-tab="' + k + '">' + l + '</button>').join('') + '<span class="tsp"></span><button id="btnRefresh" class="rf" title="Alles neu laden">↻</button>';
   $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { if (b.dataset.tab === 'mails') st.focus = null; go(b.dataset.tab); if (b.dataset.tab === 'mails') paintMails(); } });
   $('btnRefresh').onclick = () => { setStatus('Lade …', 'warn'); loadAll().then(() => setStatus('Aktualisiert ' + new Date().toLocaleTimeString('de-CH'), 'ok')); busy = busy.then(reload).catch(() => {}); };
-  $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+  $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return;
+    if (b.dataset.go !== 'unread') { go(b.dataset.go); return; }
+    const onMails = $('v-mails') && $('v-mails').style.display !== 'none';
+    setUnread(!(st.unreadOnly && onMails)); st.focus = null; go('mails'); paintMails(); kpis();
+    const ml = $('mlist'); if (ml && ml.scrollIntoView) try { ml.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (x) { /* alt */ } });
+  function setUnread(v) { st.unreadOnly = !!v; lsSet('cockpit-unread', st.unreadOnly ? '1' : ''); }
   document.addEventListener('click', e => { const b = e.target.closest('[data-lmove]'); if (!b || b.disabled) return; b.disabled = true; doMove(b.dataset.lmove, b.dataset.fid); });
   document.addEventListener('toggle', e => { const dd = e.target; if (dd && dd.matches && dd.matches('details.matt') && dd.open) loadAtt(dd.dataset.matt); }, true);
   document.addEventListener('click', async e => {
