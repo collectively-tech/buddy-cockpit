@@ -144,6 +144,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar{ position:fixed; left:50%; bottom:64px; transform:translateX(-50%); background:var(--card); border:1px solid var(--line2); box-shadow:0 4px 16px rgba(16,24,40,.15); font-size:13px; padding:10px 12px; border-radius:12px; display:none; gap:8px; align-items:center; flex-wrap:wrap; z-index:9; max-width:92vw; }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
+.mfilter{ margin:0 0 8px; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
 .foot{ margin-top:18px; color:var(--ink3); font-size:11.5px; line-height:1.5; }
 .mv{ display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
@@ -611,6 +612,12 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Schreiben fehlgeschlagen (' + r.status + ')');
       return true;
     },
+    async setRead(messageId, isRead) {   // als gelesen/ungelesen markieren (Chris 09.10.), nur auf Klick
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
+      const r = await g('PATCH', '/me/messages/' + encodeURIComponent(messageId), JSON.stringify({ isRead: !!isRead }), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Gelesen-Status nicht gesetzt (' + r.status + ')');
+      return true;
+    },
     async moveMessage(messageId, folderId) {   // Mail in einen Ordner verschieben (Chris 06.10.: verschieben ja, senden nein). Nur auf Klick, nie automatisch. Kein Löschen.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(folderId)) throw new Error('Ungültige ID');
       const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/move', JSON.stringify({ destinationId: folderId }), { 'Content-Type': 'application/json' });
@@ -1048,7 +1055,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '2d8f079720';
+  const BUILD = '4941980373';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1285,6 +1292,8 @@ if (S.cockpit) {
       + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>' : '')
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
+      + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
+      + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
   }
@@ -1297,8 +1306,11 @@ if (S.cockpit) {
       $('btnAllMails').onclick = () => { st.focus = null; paintMails(); };
       return;
     }
+    if (st.unreadOnly === undefined) st.unreadOnly = !!lsGet('cockpit-unread');
     const q = st.mq.trim().toLowerCase();
-    const list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
+    let list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
+    const nUnread = list.filter(m => !m.isRead).length;
+    if (st.unreadOnly) list = list.filter(m => !m.isRead);
     const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
     list.forEach(m => (g[mailCat(m)] || g.old).push(m));
     const sec = (k, title, sub, open) => {
@@ -1310,13 +1322,15 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
+    $('mlist').innerHTML = '<div class="mfilter"><button id="btnUnread" class="' + (st.unreadOnly ? 'primary' : '') + '" aria-pressed="' + (st.unreadOnly ? 'true' : 'false') + '">' + (st.unreadOnly ? 'Nur ungelesene (' + nUnread + ') · alle zeigen' : 'Nur ungelesene (' + nUnread + ')') + '</button></div>'
+      + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
       + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
       + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
-      + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q));
+      + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q || !!st.unreadOnly));
+    $('btnUnread').onclick = () => { st.unreadOnly = !st.unreadOnly; lsSet('cockpit-unread', st.unreadOnly ? '1' : ''); paintMails(); };
   }
   // ---- Portfolio-Ansicht aus knowledge/cockpit/portfolio.json (erzeugt von operations/build-cockpit.py aus dem Register) ----
   const chf = v => Math.round(v || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
@@ -1502,6 +1516,14 @@ if (S.cockpit) {
     const fm = e.target.closest('[data-fmove]'), fk = e.target.closest('[data-fkeep]');
     if (fm) doMove(fileBar().dataset.mid, fm.dataset.fmove);
     if (fk) fileBar().style.display = 'none';
+  });
+  document.addEventListener('click', async e => {
+    const mr = e.target.closest('[data-mread]'), mm = e.target.closest('[data-mmove]');
+    if (mm) { const m = st.mails.find(x => x.id === mm.dataset.mmove); if (m) offerFile(m); return; }
+    if (!mr) return; const m = st.mails.find(x => x.id === mr.dataset.mread); if (!m) return;
+    const v = mr.dataset.v === '1'; mr.disabled = true;
+    try { await S.setRead(m.id, v); m.isRead = v; if (st.inbox && typeof st.inbox.unreadItemCount === 'number') st.inbox.unreadItemCount += v ? -1 : 1; kpis(); paintMails(); toast(v ? 'Als gelesen markiert.' : 'Als ungelesen markiert.'); }
+    catch (err) { mr.disabled = false; setStatus(err.message, 'err'); }
   });
   document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
 
