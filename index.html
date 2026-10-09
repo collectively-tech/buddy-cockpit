@@ -1082,7 +1082,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '9e5876a9d8';
+  const BUILD = 'a3b2f09430';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1408,7 +1408,7 @@ if (S.cockpit) {
     const srv = st.attOnly && q.length >= 2 && S.searchAttachments;
     if (srv && (!st.attHits || st.attHits.q !== q)) { st.attHits = { q, list: null }; clearTimeout(st.attT); st.attT = setTimeout(async () => { try { const r = await S.searchAttachments(q); if (st.attHits && st.attHits.q === q) { st.attHits.list = r; paintMails(); } } catch (e) { if (st.attHits && st.attHits.q === q) { st.attHits.list = []; st.attHits.err = e.message; paintMails(); } } }, 500); }
     const inIds = new Set(list.map(m => m.id));
-    const nSafe = st.mails.filter(m => { const p = proposal(m); return p && p.safe; }).length;
+    const safeIds = list.filter(m => { const p = proposal(m); return p && p.safe; }).map(m => m.id); st.nxVisible = safeIds; const nSafe = safeIds.length;   // nur was gerade angezeigt wird
     const hits = srv && st.attHits && st.attHits.q === q ? st.attHits : null;
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
@@ -1423,7 +1423,7 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen</button>' : '') + '</div>'
+    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
@@ -1791,7 +1791,7 @@ if (S.cockpit) {
     const ok = e.target.closest('[data-nxok]'), no = e.target.closest('[data-nxno]'), all = e.target.closest('#btnNxAll');
     if (!(ok || no || all)) return;
     if (all) { if (all.disabled) return; all.disabled = true;
-      const list = st.mails.map(m => ({ m, p: proposal(m) })).filter(x => x.p && x.p.safe); let n = 0;
+      const ids = new Set(st.nxVisible || []); const list = st.mails.filter(m => ids.has(m.id)).map(m => ({ m, p: proposal(m) })).filter(x => x.p && x.p.safe); let n = 0;
       for (const x of list) { if (await runProposal(x.m, x.p, true)) n++; all.textContent = 'Übernehme … ' + n + '/' + list.length; }
       kpis(); paintMails(); paintHeute(); toast(n + ' Vorschläge übernommen (gelesen/abgelegt/erledigt). In Outlook jederzeit zurückholbar.'); return; }
     const m = st.mails.find(x => x.id === (ok ? ok.dataset.nxok : no.dataset.nxno)); if (!m) return;
