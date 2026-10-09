@@ -145,6 +145,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
 .mfilter{ margin:0 0 8px; }
+.nx{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 2px; padding:6px 8px; border-radius:8px; background:var(--tagbg); font-size:12.5px; } .nx .nxt{ flex:1; min-width:180px; } .nx .nxw{ color:var(--ink2); }
 .kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; }
 .lmove{ border-style:dashed; }
 .matt{ margin:6px 0 2px; font-size:12px; } .matt summary{ cursor:pointer; color:var(--ink2); } .arow{ display:flex; gap:8px; align-items:center; padding:3px 0; } .arow .an{ flex:1; min-width:0; overflow-wrap:anywhere; } .arow .as{ color:var(--ink2); font-size:11px; white-space:nowrap; }
@@ -1081,7 +1082,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '44331bcb7f';
+  const BUILD = '9e5876a9d8';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1097,7 +1098,7 @@ if (S.cockpit) {
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
-    if (pending()) pollGh();
+    if (pending()) pollGh(); else autoRun();
   }
   const ghReq = () => lsGet('cockpit-gh-req');
   const pending = () => { const r = ghReq(); return !!r && (!st.triageDate || Date.parse(r) > Date.parse(st.triageDate)); };
@@ -1302,6 +1303,46 @@ if (S.cockpit) {
   const fwdBlock = (m, tr) => !tr.forwardTo ? '' : flink(m) ? '<a class="btn" href="' + esc(flink(m)) + '" target="outlook" rel="noopener">Weiterleitung öffnen ↗</a>'
     : S.createForwardDraft ? '<details class="drf"><summary>Weiterleiten an ' + esc(tr.forwardTo) + '</summary><div class="drt">' + esc(tr.forwardText || '') + '</div><button class="primary" data-mfwd="' + esc(m.id) + '">Weiterleitung als Entwurf anlegen</button> <span class="drn">mit Anhang, wird nur angelegt, nicht gesendet</span></details>' : '';
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
+  // ---- Buddy schlägt vor (Chris 09.10.): pro Mail ein fertiger nächster Schritt, 1 Klick übernimmt, „Nein“ wird gelernt.
+  // Quellen: Buddys Routine (triage.next) + gelernte Ablage (learnPick) + Einordnung. Nichts passiert ohne Klick, nie senden.
+  const NX_LBL = { reply: 'Antwort-Entwurf anlegen', read: 'Gelesen', file: 'Ablegen', done: 'Erledigt', task: 'Task anlegen' };
+  function folderByName(name) { if (!name || !st.folders) return null; const n = String(name).toLowerCase().trim();
+    return st.folders.find(f => f.name.toLowerCase() === n) || st.folders.find(f => f.name.split(' / ').pop().toLowerCase() === n) || null; }
+  function proposal(m) {
+    const d = st.dec['next:' + m.internetMessageId]; if (d && (d.status === 'rejected' || d.status === 'accepted')) return null;
+    const tr = triageOf(m), cat = mailCat(m), lp = learnPick(m), a = {}; let why = '';
+    const nx = tr.next && typeof tr.next === 'object' ? tr.next : null;
+    if (nx) {
+      (Array.isArray(nx.do) ? nx.do : String(nx.do || '').split(/[+,\s]+/)).forEach(k => { if (NX_LBL[k]) a[k] = true; });
+      if (a.file) { const f = folderByName(nx.folder) || (lp && lp.f); if (f) a.file = f; else delete a.file; }
+      why = nx.why || '';
+    } else {
+      if ((cat === 'info' || cat === 'waiting') && !m.isRead) a.read = true;
+      if (lp && cat !== 'needs') a.file = lp.f;
+      if (cat === 'needs' && tr.draftText && !tr.draft && !dlink(m) && !tr.draftHidden) a.reply = true;
+      why = a.file ? 'gelernt: ' + lp.sure + ' % dieser Absender/Threads liegen in „' + lp.f.name + '“' : cat === 'info' ? 'nur Info' : '';
+    }
+    if (a.reply && (tr.draft || dlink(m) || !tr.draftText || !S.createReplyDraft)) delete a.reply;
+    if (a.read && m.isRead) delete a.read;
+    if (a.file && !S.moveMessage) delete a.file;
+    if (a.done && mailDone(m)) delete a.done;
+    const keys = Object.keys(a); if (!keys.length) return null;
+    const label = keys.map(k => k === 'file' ? 'Ablegen in „' + a.file.name.split(' / ').pop() + '“' : NX_LBL[k]).join(' + ');
+    return { a, keys, label, why, safe: keys.every(k => k === 'read' || k === 'file' || k === 'done') };
+  }
+  const nxHtml = m => { const p = proposal(m); if (!p) return '';
+    return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
+      + '<button class="primary" data-nxok="' + esc(m.id) + '">Übernehmen</button><button data-nxno="' + esc(m.id) + '" title="Nicht passend, Buddy lernt daraus">Nein</button></div>'; };
+  async function runProposal(m, p, quiet) {
+    if (p.a.read) { try { await S.setRead(m.id, true); m.isRead = true; if (st.inbox && st.inbox.unreadItemCount) st.inbox.unreadItemCount--; } catch (e) { setStatus(e.message, 'err'); return false; } }
+    if (p.a.done) await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', by: 'vorschlag' });
+    await decide('next:' + m.internetMessageId, 'accepted', { do: p.keys.join('+'), folder: p.a.file ? p.a.file.name : undefined, from: fromAddr(m), subject: (m.subject || '').slice(0, 80) });
+    if (p.a.reply) { const b = document.querySelector('[data-mdraft="' + m.id + '"]'); if (b) b.click(); }
+    if (p.a.task) { const b = document.querySelector('[data-mtask="' + m.id + '"]'); if (b) b.click(); }
+    if (p.a.file) { await doMove(m.id, p.a.file.id, quiet); }
+    return true;
+  }
+  const fromAddr = m => ((m.from && m.from.emailAddress && m.from.emailAddress.address) || '').toLowerCase();
   const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1).replace('.0', '') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
   function attList(mid) {
     const a = (st.att || {})[mid];
@@ -1329,6 +1370,7 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments && !S.listAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + attBlock(m)
+      + nxHtml(m)
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
       + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
@@ -1342,7 +1384,6 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
-      + (S.moveMessage && learnPick(m) ? (lp => '<button class="lmove" data-lmove="' + esc(m.id) + '" data-fid="' + esc(lp.f.id) + '" title="Gelernt aus deiner Ablage (' + lp.sure + ' % der Mails von diesem Absender bzw. Thread liegen dort): ' + esc(lp.f.name) + '">→ ' + esc(lp.f.name.split(' / ').pop()) + '</button>')(learnPick(m)) : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
@@ -1367,6 +1408,7 @@ if (S.cockpit) {
     const srv = st.attOnly && q.length >= 2 && S.searchAttachments;
     if (srv && (!st.attHits || st.attHits.q !== q)) { st.attHits = { q, list: null }; clearTimeout(st.attT); st.attT = setTimeout(async () => { try { const r = await S.searchAttachments(q); if (st.attHits && st.attHits.q === q) { st.attHits.list = r; paintMails(); } } catch (e) { if (st.attHits && st.attHits.q === q) { st.attHits.list = []; st.attHits.err = e.message; paintMails(); } } }, 500); }
     const inIds = new Set(list.map(m => m.id));
+    const nSafe = st.mails.filter(m => { const p = proposal(m); return p && p.safe; }).length;
     const hits = srv && st.attHits && st.attHits.q === q ? st.attHits : null;
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
@@ -1381,7 +1423,7 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button></div>'
+    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen</button>' : '') + '</div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
@@ -1589,7 +1631,7 @@ if (S.cockpit) {
       + '<select data-fpick="1"><option value="">Anderer Ordner …</option>' + all.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + '</select>'
       + '<button data-fkeep="1">In Inbox lassen</button>';
   }
-  async function doMove(mid, fid) {
+  async function doMove(mid, fid, quiet) {
     const m = st.mails.find(x => x.id === mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
     const b = fileBar(); b.querySelectorAll('button,select').forEach(x => { x.disabled = true; });
     try { const r = await S.moveMessage(m.id, f.id);
@@ -1597,7 +1639,7 @@ if (S.cockpit) {
       b.style.display = 'none'; kpis(); paintMails(); paintHeute();
       decide('file:' + m.internetMessageId, 'moved', { folder: f.name, subject: m.subject || '' });
       if (st.learn) { const a = addrOf(m), k = (map, key) => { if (!key) return; const o = map[key] || (map[key] = {}); o[f.id] = (o[f.id] || 0) + 1; }; k(st.learn.conv, m.conversationId); k(st.learn.snd, a); }
-      toast('Verschoben nach „' + f.name + '“', async () => {
+      if (!quiet) toast('Verschoben nach „' + f.name + '“', async () => {
         try { const inboxId = Object.keys(st.sysFolders || {}).find(k => st.sysFolders[k] === 'inbox') || 'inbox';
           const back = await S.moveMessage(r.id, inboxId); m.id = back.id; if (back.webLink) m.webLink = back.webLink; st.mails.push(m);
           st.mails.sort((a, c) => c.receivedDateTime.localeCompare(a.receivedDateTime)); if (st.inbox) st.inbox.totalItemCount++;
@@ -1661,13 +1703,25 @@ if (S.cockpit) {
     if (e.target.closest('#btnGhTok')) { const v = ($('ghTokIn').value || '').trim(); if (!v) return; lsSet('cockpit-gh-token', v);
       try { await gh('GET', ''); setStatus('GitHub verbunden.', 'ok'); loadAll(); } catch (err) { setStatus('Schlüssel geht nicht: ' + err.message, 'err'); lsSet('cockpit-gh-token', ''); paintHeute(); } return; }
     if (!e.target.closest('#btnSugRefresh')) return;
+    startRun(false);
+  });
+  async function startRun(auto) {
     const now = new Date().toISOString();
     const old = lsGet('cockpit-gh-issue');
     if (old) { try { await gh('PATCH', '/issues/' + old, { state: 'closed' }); } catch (e) { /* harmlos */ } lsSet('cockpit-gh-issue', ''); }
     try { const iss = await gh('POST', '/issues', { title: 'Aktualisieren ' + new Date().toLocaleString('de-CH'), body: 'Aus dem Buddy Cockpit.' });
-      lsSet('cockpit-gh-req', now); lsSet('cockpit-gh-issue', String(iss.number)); setStatus('Buddy aktualisiert, Ergebnis in 2 bis 4 Minuten.', 'ok'); paintHeute(); pollGh(); }
+      lsSet('cockpit-gh-req', now); lsSet('cockpit-gh-issue', String(iss.number)); if (auto) lsSet('cockpit-gh-auto', now); setStatus(auto ? 'Neue Mails: Buddy ordnet sie automatisch ein, Ergebnis in 2 bis 4 Minuten.' : 'Buddy aktualisiert, Ergebnis in 2 bis 4 Minuten.', 'ok'); paintHeute(); pollGh(); }
     catch (err) { setStatus('Aktualisieren nicht gestartet: ' + err.message, 'err'); }
-  });
+  }
+  // Automatisch (Chris 09.10.): Cockpit offen + neue, noch nicht eingeordnete Mails → Buddy läuft von selbst. Werktags 07 bis 20 Uhr, höchstens alle 30 Min.
+  function autoRun() {
+    if (!ghTok() || pending() || !st.triageDate) return;
+    const d = new Date(), h = d.getHours(), wd = d.getDay(), win = window.cockpitAutoWindow || { from: 7, to: 20, weekend: false };   // Testhaken
+    if ((!win.weekend && (wd === 0 || wd === 6)) || h < win.from || h >= win.to) return;
+    const last = Math.max(Date.parse(lsGet('cockpit-gh-req') || 0) || 0, Date.parse(st.triageDate) || 0); if (Date.now() - last < 30 * 60e3) return;
+    const fresh = st.mails.filter(m => Date.parse(m.receivedDateTime) > Date.parse(st.triageDate) && !st.triage[m.internetMessageId]).length;
+    if (fresh) startRun(true);
+  }
   document.addEventListener('click', async e => {
     const sa = e.target.closest('[data-sacc]'), sr = e.target.closest('[data-srej]'), ha = e.target.closest('[data-hacc]'), hr = e.target.closest('[data-hrej]'), hh = e.target.closest('[data-hhold]');
     if (!(sa || sr || ha || hr || hh)) return;
@@ -1733,7 +1787,18 @@ if (S.cockpit) {
     if (st.unreadOnly) lsSet('cockpit-open', JSON.stringify({ needs: true, neu: true, waiting: true, info: true, done: true, old: true }));   // ungelesene: alle Gruppen offen, damit man sie sofort sieht
     st.focus = null; go('mails'); paintMails(); kpis(); });
   function setUnread(v) { st.unreadOnly = !!v; lsSet('cockpit-unread', st.unreadOnly ? '1' : ''); }
-  document.addEventListener('click', e => { const b = e.target.closest('[data-lmove]'); if (!b || b.disabled) return; b.disabled = true; doMove(b.dataset.lmove, b.dataset.fid); });
+  document.addEventListener('click', async e => {
+    const ok = e.target.closest('[data-nxok]'), no = e.target.closest('[data-nxno]'), all = e.target.closest('#btnNxAll');
+    if (!(ok || no || all)) return;
+    if (all) { if (all.disabled) return; all.disabled = true;
+      const list = st.mails.map(m => ({ m, p: proposal(m) })).filter(x => x.p && x.p.safe); let n = 0;
+      for (const x of list) { if (await runProposal(x.m, x.p, true)) n++; all.textContent = 'Übernehme … ' + n + '/' + list.length; }
+      kpis(); paintMails(); paintHeute(); toast(n + ' Vorschläge übernommen (gelesen/abgelegt/erledigt). In Outlook jederzeit zurückholbar.'); return; }
+    const m = st.mails.find(x => x.id === (ok ? ok.dataset.nxok : no.dataset.nxno)); if (!m) return;
+    if (no) { await decide('next:' + m.internetMessageId, 'rejected', { from: fromAddr(m), subject: (m.subject || '').slice(0, 80) }); paintMails(); toast('Ok, Buddy merkt sich das.'); return; }
+    const p = proposal(m); if (!p) return; ok.disabled = true; ok.textContent = 'Wird erledigt …';
+    if (await runProposal(m, p)) { kpis(); paintMails(); if (!p.a.file) toast('Erledigt: ' + p.label); } else { ok.disabled = false; ok.textContent = 'Übernehmen'; }
+  });
   document.addEventListener('toggle', e => { const dd = e.target; if (dd && dd.matches && dd.matches('details.matt') && dd.open) loadAtt(dd.dataset.matt); }, true);
   document.addEventListener('click', async e => {
     const b = e.target.closest('[data-adl]'); if (!b || b.disabled) return;
