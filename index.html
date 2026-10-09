@@ -1076,7 +1076,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '0e8f236d4f';
+  const BUILD = 'f44ca4ecaa';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1347,7 +1347,7 @@ if (S.cockpit) {
     const q = st.mq.trim().toLowerCase();
     let list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
     if (st.attOnly === undefined) st.attOnly = !!lsGet('cockpit-att');
-    if (!st.learn && S.moveMessage) loadLearn();
+    if (!st.learn && S.moveMessage && (!st.learnTry || Date.now() - st.learnTry > 30e3)) setTimeout(loadLearn, 0);
     const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length;
     if (st.unreadOnly) list = list.filter(m => !m.isRead);
     if (st.attOnly) list = list.filter(m => m.hasAttachments);
@@ -1521,7 +1521,7 @@ if (S.cockpit) {
   const GENERIC_DOM = /^(gmail|googlemail|outlook|hotmail|live|icloud|me|gmx|bluewin|yahoo|protonmail|bluehorizon|bluehorizonmanagement)\./i;
   const addrOf = m => ((m.from && m.from.emailAddress && m.from.emailAddress.address) || '').toLowerCase();
   async function loadLearn() {
-    if (st.learn || st.learnBusy || !S.apiAll) return; st.learnBusy = true;
+    if (st.learn || st.learnBusy || !S.apiAll || !S.moveMessage) return; st.learnBusy = true;
     try {
       const folders = await loadFolders(); const ok = new Set(folders.map(f => f.id));
       const filed = await S.apiAll('/me/messages?$top=250&$orderby=receivedDateTime desc&$select=from,parentFolderId,conversationId', null, 1500).catch(() => []);
@@ -1530,8 +1530,8 @@ if (S.cockpit) {
       filed.forEach(x => { if (!ok.has(x.parentFolderId)) return; L.n++; const a = addrOf(x), dom = a.split('@')[1] || '';
         inc(L.conv, x.conversationId, x.parentFolderId); inc(L.snd, a, x.parentFolderId); if (dom && !GENERIC_DOM.test(dom)) inc(L.dom, dom, x.parentFolderId); });
       st.learn = L;
-    } catch (e) { st.learn = { conv: {}, snd: {}, dom: {}, n: 0 }; }
-    st.learnBusy = false; if (st.mails && st.mails.length) paintMails();
+    } catch (e) { st.learn = null; st.learnTry = Date.now(); console.log('learn', e && e.message); }
+    st.learnBusy = false; if (st.learn && st.mails && st.mails.length) paintMails();
   }
   function learnScores(m) {
     const L = st.learn, sc = {}; if (!L) return sc;
