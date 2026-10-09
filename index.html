@@ -145,6 +145,8 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
 .mfilter{ margin:0 0 8px; }
+.lmove{ border-style:dashed; }
+.matt{ margin:6px 0 2px; font-size:12px; } .matt summary{ cursor:pointer; color:var(--ink2); } .arow{ display:flex; gap:8px; align-items:center; padding:3px 0; } .arow .an{ flex:1; min-width:0; overflow-wrap:anywhere; } .arow .as{ color:var(--ink2); font-size:11px; white-space:nowrap; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
 .foot{ margin-top:18px; color:var(--ink3); font-size:11.5px; line-height:1.5; }
 .mv{ display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
@@ -618,6 +620,25 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Gelesen-Status nicht gesetzt (' + r.status + ')');
       return true;
     },
+    async listAttachments(messageId) {   // Anhänge einer Mail auflisten (nur lesen, ohne Inhalt)
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
+      const r = await g('GET', '/me/messages/' + encodeURIComponent(messageId) + '/attachments?$select=id,name,size,contentType,isInline');
+      if (!r.ok) throw new Error('Anhänge nicht lesbar (' + r.status + ')');
+      return ((await r.json()).value || []);
+    },
+    async attachmentBlob(messageId, attId) {   // einen Anhang herunterladen (nur lesen)
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(attId)) throw new Error('Ungültige ID');
+      const r = await g('GET', '/me/messages/' + encodeURIComponent(messageId) + '/attachments/' + encodeURIComponent(attId) + '/$value');
+      if (!r.ok) throw new Error('Download fehlgeschlagen (' + r.status + ')');
+      return r.blob();
+    },
+    async searchAttachments(q) {   // Mails in ALLEN Ordnern, deren Anhang-Name den Begriff enthält (nur lesen)
+      const t = String(q || '').replace(/["\\]/g, ' ').trim(); if (t.length < 2) return [];
+      const r = await g('GET', '/me/messages?$search=' + encodeURIComponent('"attachment:' + t + '"') + '&$top=25'
+        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag,conversationId,parentFolderId');
+      if (!r.ok) throw new Error('Suche fehlgeschlagen (' + r.status + ')');
+      return ((await r.json()).value || []);
+    },
     async moveMessage(messageId, folderId) {   // Mail in einen Ordner verschieben (Chris 06.10.: verschieben ja, senden nein). Nur auf Klick, nie automatisch. Kein Löschen.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(folderId)) throw new Error('Ungültige ID');
       const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/move', JSON.stringify({ destinationId: folderId }), { 'Content-Type': 'application/json' });
@@ -1055,7 +1076,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'e161c645f2';
+  const BUILD = '0e8f236d4f';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1271,6 +1292,20 @@ if (S.cockpit) {
   const fwdBlock = (m, tr) => !tr.forwardTo ? '' : flink(m) ? '<a class="btn" href="' + esc(flink(m)) + '" target="outlook" rel="noopener">Weiterleitung öffnen ↗</a>'
     : S.createForwardDraft ? '<details class="drf"><summary>Weiterleiten an ' + esc(tr.forwardTo) + '</summary><div class="drt">' + esc(tr.forwardText || '') + '</div><button class="primary" data-mfwd="' + esc(m.id) + '">Weiterleitung als Entwurf anlegen</button> <span class="drn">mit Anhang, wird nur angelegt, nicht gesendet</span></details>' : '';
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
+  const kb = b => b >= 1048576 ? (b / 1048576).toFixed(1).replace('.0', '') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB';
+  function attList(mid) {
+    const a = (st.att || {})[mid];
+    if (!a) return '<span class="drn">wird geladen …</span>';
+    if (a.err) return '<span class="drn">' + esc(a.err) + '</span>';
+    const files = a.list.filter(x => !x.isInline).length ? a.list.filter(x => !x.isInline) : a.list;
+    if (!files.length) return '<span class="drn">Keine Anhänge gefunden.</span>';
+    return files.map(x => '<div class="arow"><span class="an">' + esc(x.name || 'Anhang') + '</span><span class="as">' + kb(x.size || 0) + '</span><button data-adl="' + esc(mid) + '" data-aid="' + esc(x.id) + '">Herunterladen ↓</button></div>').join('');
+  }
+  async function loadAtt(mid) {
+    st.att = st.att || {}; if (st.att[mid] && !st.att[mid].err) return;
+    try { st.att[mid] = { list: await S.listAttachments(mid) }; } catch (e) { st.att[mid] = { err: e.message, list: [] }; }
+    document.querySelectorAll('details.matt').forEach(dd => { if (dd.dataset.matt === mid) dd.querySelector('.mattl').innerHTML = attList(mid); });
+  }
   function mailRow(m) {
     const tr = triageOf(m);
     const when = new Date(m.receivedDateTime);
@@ -1281,6 +1316,7 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
+      + (m.hasAttachments && S.listAttachments ? '<details class="matt" data-matt="' + esc(m.id) + '"><summary>📎 Anhänge</summary><div class="mattl">' + attList(m.id) + '</div></details>' : '')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
       + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
         + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span>' : '') + '</details>' : '')
@@ -1293,6 +1329,7 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
+      + (S.moveMessage && learnPick(m) ? (lp => '<button class="lmove" data-lmove="' + esc(m.id) + '" data-fid="' + esc(lp.f.id) + '" title="Gelernt aus deiner Ablage (' + lp.sure + ' % der Mails von diesem Absender bzw. Thread liegen dort): ' + esc(lp.f.name) + '">→ ' + esc(lp.f.name.split(' / ').pop()) + '</button>')(learnPick(m)) : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
@@ -1309,8 +1346,17 @@ if (S.cockpit) {
     if (st.unreadOnly === undefined) st.unreadOnly = !!lsGet('cockpit-unread');
     const q = st.mq.trim().toLowerCase();
     let list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
-    const nUnread = list.filter(m => !m.isRead).length;
+    if (st.attOnly === undefined) st.attOnly = !!lsGet('cockpit-att');
+    if (!st.learn && S.moveMessage) loadLearn();
+    const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length;
     if (st.unreadOnly) list = list.filter(m => !m.isRead);
+    if (st.attOnly) list = list.filter(m => m.hasAttachments);
+    const srv = st.attOnly && q.length >= 2 && S.searchAttachments;
+    if (srv && (!st.attHits || st.attHits.q !== q)) { st.attHits = { q, list: null }; clearTimeout(st.attT); st.attT = setTimeout(async () => { try { const r = await S.searchAttachments(q); if (st.attHits && st.attHits.q === q) { st.attHits.list = r; paintMails(); } } catch (e) { if (st.attHits && st.attHits.q === q) { st.attHits.list = []; st.attHits.err = e.message; paintMails(); } } }, 500); }
+    const inIds = new Set(list.map(m => m.id));
+    const hits = srv && st.attHits && st.attHits.q === q ? st.attHits : null;
+    const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
+      + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
     list.forEach(m => (g[mailCat(m)] || g.old).push(m));
     const sec = (k, title, sub, open) => {
@@ -1322,15 +1368,17 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mfilter"><button id="btnUnread" class="' + (st.unreadOnly ? 'primary' : '') + '" aria-pressed="' + (st.unreadOnly ? 'true' : 'false') + '">' + (st.unreadOnly ? 'Nur ungelesene (' + nUnread + ') · alle zeigen' : 'Nur ungelesene (' + nUnread + ')') + '</button></div>'
+    $('mlist').innerHTML = '<div class="mfilter"><button id="btnUnread" class="' + (st.unreadOnly ? 'primary' : '') + '" aria-pressed="' + (st.unreadOnly ? 'true' : 'false') + '">' + (st.unreadOnly ? 'Nur ungelesene (' + nUnread + ') · alle zeigen' : 'Nur ungelesene (' + nUnread + ')') + '</button> <button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button></div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
+      + hitsHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
       + sec('info', 'Nur Info', 'Newsletter, Benachrichtigungen', isOpen('info', false))
       + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
-      + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q || !!st.unreadOnly));
+      + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q || !!st.unreadOnly || !!st.attOnly));
     $('btnUnread').onclick = () => { st.unreadOnly = !st.unreadOnly; lsSet('cockpit-unread', st.unreadOnly ? '1' : ''); paintMails(); };
+    $('btnAtt').onclick = () => { st.attOnly = !st.attOnly; lsSet('cockpit-att', st.attOnly ? '1' : ''); paintMails(); };
   }
   // ---- Portfolio-Ansicht aus knowledge/cockpit/portfolio.json (erzeugt von operations/build-cockpit.py aus dem Register) ----
   const chf = v => Math.round(v || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
@@ -1469,6 +1517,36 @@ if (S.cockpit) {
     await walk('/me/mailFolders?$top=100&$select=id,displayName,childFolderCount', '', 0);
     st.folders = out.sort((a, b) => a.name.localeCompare(b.name, 'de')); st.sysFolders = sys; return st.folders;
   }
+  // ---- Ablage lernen (Chris 09.10.): aus seinen Verschiebungen in Outlook/Inbox. Nur Metadaten (Absender, Thread, Ordner), nie Inhalte.
+  const GENERIC_DOM = /^(gmail|googlemail|outlook|hotmail|live|icloud|me|gmx|bluewin|yahoo|protonmail|bluehorizon|bluehorizonmanagement)\./i;
+  const addrOf = m => ((m.from && m.from.emailAddress && m.from.emailAddress.address) || '').toLowerCase();
+  async function loadLearn() {
+    if (st.learn || st.learnBusy || !S.apiAll) return; st.learnBusy = true;
+    try {
+      const folders = await loadFolders(); const ok = new Set(folders.map(f => f.id));
+      const filed = await S.apiAll('/me/messages?$top=250&$orderby=receivedDateTime desc&$select=from,parentFolderId,conversationId', null, 1500).catch(() => []);
+      const L = { conv: {}, snd: {}, dom: {}, n: 0 };
+      const inc = (map, k, fid) => { if (!k) return; const o = map[k] || (map[k] = {}); o[fid] = (o[fid] || 0) + 1; };
+      filed.forEach(x => { if (!ok.has(x.parentFolderId)) return; L.n++; const a = addrOf(x), dom = a.split('@')[1] || '';
+        inc(L.conv, x.conversationId, x.parentFolderId); inc(L.snd, a, x.parentFolderId); if (dom && !GENERIC_DOM.test(dom)) inc(L.dom, dom, x.parentFolderId); });
+      st.learn = L;
+    } catch (e) { st.learn = { conv: {}, snd: {}, dom: {}, n: 0 }; }
+    st.learnBusy = false; if (st.mails && st.mails.length) paintMails();
+  }
+  function learnScores(m) {
+    const L = st.learn, sc = {}; if (!L) return sc;
+    const add = (o, w) => Object.entries(o || {}).forEach(([f, c]) => { sc[f] = (sc[f] || 0) + c * w; });
+    const a = addrOf(m), dom = a.split('@')[1] || '';
+    add(L.conv[m.conversationId], 10); if (L.snd[a]) add(L.snd[a], 3); else if (dom && !GENERIC_DOM.test(dom)) add(L.dom[dom], 1);   // Firma nur, wenn der Absender selbst unbekannt ist
+    return sc;
+  }
+  function learnPick(m) {   // ein klarer Vorschlag oder nichts
+    if (!st.learn || !st.folders) return null;
+    const e = Object.entries(learnScores(m)).sort((x, y) => y[1] - x[1]); if (!e.length) return null;
+    const tot = e.reduce((t, x) => t + x[1], 0), [fid, top] = e[0];
+    if (top < 6 || top / tot < 0.6) return null;
+    const f = st.folders.find(x => x.id === fid); return f ? { f, sure: Math.round(100 * top / tot) } : null;
+  }
   async function folderHints(m) {
     const folders = await loadFolders(); const byId = new Map(folders.map(f => [f.id, f])); const score = new Map();
     const add = (id, w) => { if (byId.has(id)) score.set(id, (score.get(id) || 0) + w); };
@@ -1478,6 +1556,7 @@ if (S.cockpit) {
       m.from && m.from.emailAddress && m.from.emailAddress.address ? S.apiAll("/me/messages?$filter=from/emailAddress/address eq '" + q(m.from.emailAddress.address) + "'&$select=parentFolderId&$top=50", null, 50).catch(() => []) : []
     ]);
     conv.forEach(x => add(x.parentFolderId, 10)); snd.forEach(x => add(x.parentFolderId, 2));
+    Object.entries(learnScores(m)).forEach(([f, c]) => add(f, c));
     const th = topicOf(m.subject || ''); const txt = ((m.subject || '') + ' ' + (th ? th.title : '')).toLowerCase();
     folders.forEach(f => { const leaf = f.name.split(' / ').pop().toLowerCase(); if (leaf.length >= 3 && txt.includes(leaf)) add(f.id, 5); });
     return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => byId.get(id));
@@ -1504,6 +1583,7 @@ if (S.cockpit) {
       st.mails = st.mails.filter(x => x !== m); if (st.inbox && st.inbox.totalItemCount) st.inbox.totalItemCount--;
       b.style.display = 'none'; kpis(); paintMails(); paintHeute();
       decide('file:' + m.internetMessageId, 'moved', { folder: f.name, subject: m.subject || '' });
+      if (st.learn) { const a = addrOf(m), k = (map, key) => { if (!key) return; const o = map[key] || (map[key] = {}); o[f.id] = (o[f.id] || 0) + 1; }; k(st.learn.conv, m.conversationId); k(st.learn.snd, a); }
       toast('Verschoben nach „' + f.name + '“', async () => {
         try { const inboxId = Object.keys(st.sysFolders || {}).find(k => st.sysFolders[k] === 'inbox') || 'inbox';
           const back = await S.moveMessage(r.id, inboxId); m.id = back.id; if (back.webLink) m.webLink = back.webLink; st.mails.push(m);
@@ -1623,6 +1703,20 @@ if (S.cockpit) {
   $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { if (b.dataset.tab === 'mails') st.focus = null; go(b.dataset.tab); if (b.dataset.tab === 'mails') paintMails(); } });
   $('btnRefresh').onclick = () => { setStatus('Lade …', 'warn'); loadAll().then(() => setStatus('Aktualisiert ' + new Date().toLocaleTimeString('de-CH'), 'ok')); busy = busy.then(reload).catch(() => {}); };
   $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (b) go(b.dataset.go); });
+  document.addEventListener('click', e => { const b = e.target.closest('[data-lmove]'); if (!b || b.disabled) return; b.disabled = true; doMove(b.dataset.lmove, b.dataset.fid); });
+  document.addEventListener('toggle', e => { const dd = e.target; if (dd && dd.matches && dd.matches('details.matt') && dd.open) loadAtt(dd.dataset.matt); }, true);
+  document.addEventListener('click', async e => {
+    const b = e.target.closest('[data-adl]'); if (!b || b.disabled) return;
+    const mid = b.dataset.adl, aid = b.dataset.aid, a = ((st.att || {})[mid] || { list: [] }).list.find(x => x.id === aid) || {};
+    b.disabled = true; const lbl = b.textContent; b.textContent = 'Lädt …';
+    try {
+      const blob = await S.attachmentBlob(mid, aid);
+      let name = a.name || 'anhang'; if (/rfc822|itemAttachment/i.test((a.contentType || '') + (a['@odata.type'] || '')) && !/\.[a-z0-9]{2,5}$/i.test(name)) name += '.eml';
+      const url = URL.createObjectURL(blob), link = document.createElement('a'); link.href = url; link.download = name; document.body.appendChild(link); link.click(); link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 30e3); toast('Heruntergeladen: ' + name);
+    } catch (err) { setStatus(err.message, 'err'); }
+    b.disabled = false; b.textContent = lbl;
+  });
   $('mq').addEventListener('input', () => { st.mq = $('mq').value; st.shown = {}; st.focus = null; paintMails(); });
   $('v-mails').addEventListener('toggle', e => { const d = e.target.closest && e.target.closest('details[data-g]'); if (!d) return;
     const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {}; o[d.dataset.g] = d.open; lsSet('cockpit-open', JSON.stringify(o)); }, true);
