@@ -1076,7 +1076,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'f44ca4ecaa';
+  const BUILD = '383779153b';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1255,6 +1255,7 @@ if (S.cockpit) {
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
             : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
+          + attBlock(m)
           + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest und Antwort oder nächsten Schritt vorschlägt">Neuer Chat zu dieser Mail</a></span>'; }).join('') + '</div>');
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (!li.dataset.prompt) li.dataset.prompt = pointPrompt(li.textContent.trim(), []); });
@@ -1297,14 +1298,17 @@ if (S.cockpit) {
     const a = (st.att || {})[mid];
     if (!a) return '<span class="drn">wird geladen …</span>';
     if (a.err) return '<span class="drn">' + esc(a.err) + '</span>';
-    const files = a.list.filter(x => !x.isInline).length ? a.list.filter(x => !x.isInline) : a.list;
+    const files = attFiles(a);
     if (!files.length) return '<span class="drn">Keine Anhänge gefunden.</span>';
     return files.map(x => '<div class="arow"><span class="an">' + esc(x.name || 'Anhang') + '</span><span class="as">' + kb(x.size || 0) + '</span><button data-adl="' + esc(mid) + '" data-aid="' + esc(x.id) + '">Herunterladen ↓</button></div>').join('');
   }
+  const attFiles = a => (a.list.filter(x => !x.isInline).length ? a.list.filter(x => !x.isInline) : a.list);
+  const attSum = mid => { const a = (st.att || {})[mid]; if (!a || a.err) return '📎 Anhänge'; const n = attFiles(a).length; return '📎 ' + n + (n === 1 ? ' Anhang' : ' Anhänge'); };
+  const attBlock = m => (m.hasAttachments && S.listAttachments ? '<details class="matt" data-matt="' + esc(m.id) + '"><summary>' + attSum(m.id) + '</summary><div class="mattl">' + attList(m.id) + '</div></details>' : '');
   async function loadAtt(mid) {
     st.att = st.att || {}; if (st.att[mid] && !st.att[mid].err) return;
     try { st.att[mid] = { list: await S.listAttachments(mid) }; } catch (e) { st.att[mid] = { err: e.message, list: [] }; }
-    document.querySelectorAll('details.matt').forEach(dd => { if (dd.dataset.matt === mid) dd.querySelector('.mattl').innerHTML = attList(mid); });
+    document.querySelectorAll('details.matt').forEach(dd => { if (dd.dataset.matt === mid) { dd.querySelector('.mattl').innerHTML = attList(mid); dd.querySelector('summary').textContent = attSum(mid); } });
   }
   function mailRow(m) {
     const tr = triageOf(m);
@@ -1313,10 +1317,10 @@ if (S.cockpit) {
     const linked = tasksForMail(m);
     return '<div class="mail' + (m.isRead ? '' : ' unread') + '" data-mid="' + esc(m.id) + '">'
       + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + w + '</span></div>'
-      + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments ? ' <span class="hold">📎</span>' : '')
+      + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments && !S.listAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
+      + attBlock(m)
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
-      + (m.hasAttachments && S.listAttachments ? '<details class="matt" data-matt="' + esc(m.id) + '"><summary>📎 Anhänge</summary><div class="mattl">' + attList(m.id) + '</div></details>' : '')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
       + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
         + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span>' : '') + '</details>' : '')
