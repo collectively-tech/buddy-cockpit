@@ -145,6 +145,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
 .mfilter{ margin:0 0 8px; }
+.chip.ghostchip{ background:transparent; border:1px dashed var(--line2); color:var(--ink2); cursor:default; }
 .nx{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 2px; padding:6px 8px; border-radius:8px; background:var(--tagbg); font-size:12.5px; } .nx .nxt{ flex:1; min-width:180px; } .nx .nxw{ color:var(--ink2); }
 .kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; }
 .lmove{ border-style:dashed; }
@@ -1078,11 +1079,12 @@ if (S.cockpit) {
     try { st.pf = pf && pf.text ? JSON.parse(pf.text) : null; } catch (e) { st.pf = null; st.err.pf = 'portfolio.json nicht lesbar'; }
     const f = await S.readPath(P.links); st.links = f ? f.text : null;
     const th = await S.readPath(P.themen).catch(() => null);
+    st.themenMod = th && th.modified ? th.modified : null;
     try { st.themen = th && th.text ? JSON.parse(th.text) : null; } catch (e) { st.err.links = 'themen.json nicht lesbar'; }
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'a3b2f09430';
+  const BUILD = 'ffe7ecabae';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1149,6 +1151,8 @@ if (S.cockpit) {
     try { navigator.clipboard.writeText(a.dataset.copy).then(() => go(true), () => go(false)); } catch (err) { go(false); }
     // sofort im Klick starten (nicht erst nach dem Kopieren), sonst blockiert der Browser das Öffnen des Kurzbefehls; der Kurzbefehl wartet 2 s vor dem Einfügen
     if (viaShortcut) openUrl('shortcuts://run-shortcut?name=' + encodeURIComponent('Buddy einfügen') + '&input=text&text=' + encodeURIComponent(a.getAttribute('href'))); });
+  document.addEventListener('click', e => { const a = e.target.closest('a[data-newchat]'); if (!a || !a.dataset.newchat) return;
+    const li = a.closest('li[data-bi]'); decide('chat:' + a.dataset.newchat, 'started', { point: li ? li.textContent.split('\n')[0].slice(0, 80) : '' }); });
   function topicChips(th, context, noNew) {   // noNew: Zeile hat schon einen eigenen „Mit Buddy“-Knopf
     if (!th) return '';
     const proj = st.themen && st.themen.buddyProject;
@@ -1266,14 +1270,16 @@ if (S.cockpit) {
             : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
           + attBlock(m)
-          + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext und schlag mir die Antwort oder den nächsten Schritt vor.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest und Antwort oder nächsten Schritt vorschlägt">Neuer Chat zu dieser Mail</a></span>'; }).join('') + '</div>');
+          + '</span>'; }).join('') + '</div>');   // kein eigener „Neuer Chat zu dieser Mail“ in der Lage: der Punkt-Chat enthält alle Mails (Chris 10.10.)
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (!li.dataset.prompt) li.dataset.prompt = pointPrompt(li.textContent.trim(), []); });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts')));
       // Punkt als Ganzes mit Buddy: neuer Chat mit Punkt + allen Mails, oder bestehender Chat (Text in die Zwischenablage, dort einfügen)
       const tc = li.querySelector('.tchips'), pr = li.dataset.prompt;
       if (tc && pr) {
-        if (li.querySelector('.lacts')) tc.querySelector('.tth').insertAdjacentHTML('afterend', '<a class="chip" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">Neuer Chat zu diesem Punkt ↗</a>');
+        const started = th && st.dec['chat:' + th.id] && st.dec['chat:' + th.id].status === 'started' && !(st.themenMod && Date.parse(st.themenMod) > Date.parse(st.dec['chat:' + th.id].at)) ? st.dec['chat:' + th.id] : null;   // nach Eintrag im Themen-Register erscheint stattdessen der Direktlink
+        if (li.querySelector('.lacts')) tc.insertAdjacentHTML('beforeend', (started ? '<span class="chip ghostchip" title="Im Cockpit gestartet. Sobald Buddy die Sitzung im Themen-Register einträgt, erscheint hier der Direktlink.">Chat gestartet ' + esc(whenOf(started.at)) + ', noch nicht verknüpft</span>' : '')
+          + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
   }
