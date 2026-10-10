@@ -145,6 +145,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .filebar .fbt{ font-weight:700; } .filebar .fbl{ color:var(--ink2); } .filebar select{ font:inherit; padding:5px 8px; border-radius:8px; max-width:260px; }
 .prow.paused{ opacity:.7; }
 .mfilter{ margin:0 0 8px; }
+.nx select.nxf{ max-width:240px; font-size:12px; padding:2px 4px; margin-left:4px; }
 .chip.ghostchip{ background:transparent; border:1px dashed var(--line2); color:var(--ink2); cursor:default; }
 .nx{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 2px; padding:6px 8px; border-radius:8px; background:var(--tagbg); font-size:12.5px; } .nx .nxt{ flex:1; min-width:180px; } .nx .nxw{ color:var(--ink2); }
 .kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; }
@@ -1084,7 +1085,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'dd340285d4';
+  const BUILD = '2a964112cc';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1332,29 +1333,46 @@ if (S.cockpit) {
       if (a.file) { const f = folderByName(nx.folder) || (lp && lp.f); if (f) a.file = f; else delete a.file; }
       why = nx.why || '';
     } else {
-      if ((cat === 'info' || cat === 'waiting') && !m.isRead) a.read = true;
+      if (cat !== 'needs' && !m.isRead) a.read = true;   // Übernehmen = erledigt anschauen: gelesen (Chris 10.10.)
       if (lp && cat !== 'needs') a.file = lp.f;
       if (cat === 'needs' && tr.draftText && !tr.draft && !dlink(m) && !tr.draftHidden) a.reply = true;
       why = a.file ? 'gelernt: ' + lp.sure + ' % dieser Absender/Threads liegen in „' + lp.f.name + '“' : cat === 'info' ? 'nur Info' : '';
     }
     if (a.reply && (tr.draft || dlink(m) || !tr.draftText || !S.createReplyDraft)) delete a.reply;
+    if (a.file && !m.isRead && !a.reply && !a.task) a.read = true;   // wer ablegt, hat sie gelesen
     if (a.read && m.isRead) delete a.read;
     if (a.file && !S.moveMessage) delete a.file;
     if (a.done && mailDone(m)) delete a.done;
     const keys = Object.keys(a); if (!keys.length) return null;
-    const label = keys.map(k => k === 'file' ? 'Ablegen in „' + a.file.name.split(' / ').pop() + '“' : NX_LBL[k]).join(' + ');
-    return { a, keys, label, why, safe: keys.every(k => k === 'read' || k === 'file' || k === 'done') };
+    const label = keys.filter(k => k !== 'file').map(k => NX_LBL[k]).join(' + ') + (a.file ? (keys.length > 1 ? ' + ' : '') + 'Ablegen' : '');
+    return { a, keys, label, why, folder: a.file || null, safe: keys.every(k => k === 'read' || k === 'file' || k === 'done') };
+  }
+  // Ordner direkt im Vorschlag wählbar: vorbelegt mit dem gelernten/Buddys Ordner, änderbar, „nicht ablegen“ möglich (Chris 10.10.)
+  function nxFolderSel(m, p) {
+    if (!S.moveMessage || p.a.reply || p.a.task) return '';
+    const fs = st.folders || [], cur = p.folder ? p.folder.id : '';
+    const opts = '<option value=""' + (cur ? '' : ' selected') + '>' + (cur ? 'nicht ablegen' : 'Ordner wählen (optional) …') + '</option>'
+      + (p.folder && !fs.some(f => f.id === p.folder.id) ? '<option value="' + esc(p.folder.id) + '" selected>' + esc(p.folder.name) + '</option>' : '')
+      + fs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('');
+    return ' <select class="nxf" data-nxf="' + esc(m.id) + '" title="Ordner: vorgeschlagen aus deiner Ablage, hier änderbar">' + opts + '</select>';
   }
   const nxHtml = m => { const p = proposal(m); if (!p) return '';
-    return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
+    return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + nxFolderSel(m, p) + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
       + '<button class="primary" data-nxok="' + esc(m.id) + '">Übernehmen</button><button data-nxno="' + esc(m.id) + '" title="Nicht passend, Buddy lernt daraus">Nein</button></div>'; };
+  function chosenFolder(m, p) {   // Auswahl im Vorschlag hat Vorrang vor dem Vorschlag
+    const sel = [...document.querySelectorAll('select[data-nxf]')].find(x => x.dataset.nxf === m.id);
+    if (!sel) return p.folder || null;
+    return sel.value ? ((st.folders || []).find(f => f.id === sel.value) || (p.folder && p.folder.id === sel.value ? p.folder : null)) : null;
+  }
   async function runProposal(m, p, quiet) {
+    const fold = chosenFolder(m, p), changed = (fold ? fold.id : '') !== (p.folder ? p.folder.id : '');
+    if (fold && !m.isRead && !p.a.reply && !p.a.task) p.a.read = true;
     if (p.a.read) { try { await S.setRead(m.id, true); m.isRead = true; if (st.inbox && st.inbox.unreadItemCount) st.inbox.unreadItemCount--; } catch (e) { setStatus(e.message, 'err'); return false; } }
     if (p.a.done) await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', by: 'vorschlag' });
-    await decide('next:' + m.internetMessageId, 'accepted', { do: p.keys.join('+'), folder: p.a.file ? p.a.file.name : undefined, from: fromAddr(m), subject: (m.subject || '').slice(0, 80) });
+    await decide('next:' + m.internetMessageId, 'accepted', { do: p.keys.join('+'), folder: fold ? fold.name : undefined, suggested: p.folder ? p.folder.name : undefined, corrected: changed || undefined, from: fromAddr(m), subject: (m.subject || '').slice(0, 80) });
     if (p.a.reply) { const b = document.querySelector('[data-mdraft="' + m.id + '"]'); if (b) b.click(); }
     if (p.a.task) { const b = document.querySelector('[data-mtask="' + m.id + '"]'); if (b) b.click(); }
-    if (p.a.file) { await doMove(m.id, p.a.file.id, quiet); }
+    if (fold) { await doMove(m.id, fold.id, quiet); }
     return true;
   }
   const fromAddr = m => ((m.from && m.from.emailAddress && m.from.emailAddress.address) || '').toLowerCase();
