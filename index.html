@@ -1085,7 +1085,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '2a964112cc';
+  const BUILD = '10208a73be';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1331,7 +1331,7 @@ if (S.cockpit) {
     if (nx) {
       (Array.isArray(nx.do) ? nx.do : String(nx.do || '').split(/[+,\s]+/)).forEach(k => { if (NX_LBL[k]) a[k] = true; });
       if (a.file) { const f = folderByName(nx.folder) || (lp && lp.f); if (f) a.file = f; else delete a.file; }
-      why = nx.why || '';
+      if (!a.file && !a.reply && !a.task && lp && cat !== 'needs') { a.file = lp.f; why = (nx.why ? nx.why + '; ' : '') + 'Ordner gelernt: ' + lp.sure + ' %'; } else why = nx.why || '';   // Buddys Vorschlag ohne Ordner: gelernter Ordner vorbelegt
     } else {
       if (cat !== 'needs' && !m.isRead) a.read = true;   // Übernehmen = erledigt anschauen: gelesen (Chris 10.10.)
       if (lp && cat !== 'needs') a.file = lp.f;
