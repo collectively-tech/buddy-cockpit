@@ -122,6 +122,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .due.over{ color:var(--hot); background:var(--hotbg); }
 .hold{ font-size:10px; font-weight:700; color:var(--ink2); background:var(--holdbg); border-radius:5px; padding:1px 6px; }
 .chip{ font-size:10.5px; font-weight:700; border-radius:20px; padding:1px 8px; text-decoration:none; background:var(--acc2); color:var(--acc); white-space:nowrap; }
+.chatw{ display:inline-flex; align-items:center; gap:2px; } .chipx{ border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:12px; padding:2px 5px; border-radius:6px; line-height:1; } .chipx:hover{ background:var(--hotbg); color:var(--hot); }
 .chip.mail{ background:#e0f2fe; color:#0369a1; } .chip.chat{ background:#fdf0e7; color:#c2410c; } .chip.file{ background:#ecfdf3; color:#15803d; }
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .chip.mail{ background:#0c2a3d; color:#7dd3fc; } :root:not([data-theme="light"]) .chip.chat{ background:#3a1e0e; color:#fdba74; } :root:not([data-theme="light"]) .chip.file{ background:#0e2a19; color:#86efac; } }
 .task.paused{ opacity:.7; }
@@ -1085,7 +1086,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ce2936d4be';
+  const BUILD = 'ee1668f27c';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1154,6 +1155,27 @@ if (S.cockpit) {
     if (viaShortcut) openUrl('shortcuts://run-shortcut?name=' + encodeURIComponent('Buddy einfügen') + '&input=text&text=' + encodeURIComponent(a.getAttribute('href'))); });
   document.addEventListener('click', e => { const a = e.target.closest('a[data-newchat]'); if (!a || !a.dataset.newchat) return;
     const li = a.closest('li[data-bi]'); decide('chat:' + a.dataset.newchat, 'started', { point: li ? li.textContent.split('\n')[0].slice(0, 80) : '' }); });
+  // Chat-Verknüpfung direkt im Cockpit entfernen (Chris 10.10.): sofort, mit Sicherung; der Abgleich-Lauf verknüpft sie nicht wieder (archivedSessions)
+  const chatChip = (thId, n, href, title) => '<span class="chatw"><a class="chip chat" href="' + esc(href) + '" title="' + esc(title) + '">Bestehender Chat „' + esc(n) + '“ ↗</a>'
+    + '<button type="button" class="chipx" data-unlink="' + esc(n) + '" data-th="' + esc(thId || '') + '" title="Verknüpfung entfernen (Chat archiviert oder falsch zugeordnet). Der Chat selbst bleibt in Claude.">✕</button></span>';
+  async function unlinkChat(n, thId) {
+    const cur = await S.readPath(P.themen); if (!cur || !cur.text) throw new Error('themen.json nicht lesbar');
+    const j = JSON.parse(cur.text);
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 13).replace('T', '-');
+    await S.writePath(P.themen.replace(/\.json$/, '.backup-' + stamp + '.json'), cur.text);
+    for (const t of j.themes || []) if (!thId || t.id === thId) t.sessions = (t.sessions || []).filter(x => x !== n);
+    const still = (j.themes || []).some(t => (t.sessions || []).includes(n));
+    if (!still) { const id = j.sessionIds ? j.sessionIds[n] : null; if (j.sessionIds) delete j.sessionIds[n];
+      j.archivedSessions = j.archivedSessions || {}; j.archivedSessions[n] = { id: id || null, removed: new Date().toISOString().slice(0, 10), by: 'cockpit' }; }
+    await S.writePath(P.themen, JSON.stringify(j, null, 1));
+    st.themen = j;
+    return still;
+  }
+  document.addEventListener('click', async e => { const b = e.target.closest('button[data-unlink]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const n = b.dataset.unlink; if (b.disabled || !window.confirm('Verknüpfung zum Chat „' + n + '“ entfernen? Der Chat selbst bleibt in Claude.')) return;
+    b.disabled = true;
+    try { const still = await unlinkChat(n, b.dataset.th); paint(); toast('Chat „' + n + '“ ' + (still ? 'bei diesem Thema entfernt.' : 'entfernt. Er wird nicht wieder verknüpft.')); }
+    catch (err) { b.disabled = false; toast('Entfernen ging nicht: ' + err.message); } });
   function topicChips(th, context, noNew) {   // noNew: Zeile hat schon einen eigenen „Mit Buddy“-Knopf
     if (!th) return '';
     const proj = st.themen && st.themen.buddyProject;
@@ -1161,8 +1183,8 @@ if (S.cockpit) {
     return '<div class="tchips"><span class="tth">Thema: <b>' + esc(th.title) + '</b></span>'
       + (th.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + th.chat)) + '">Chat öffnen ↗</a>' : '')
       + (th.sessions || []).map(n => { const sid = sessId(n);
-          return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung im Projekt Buddy öffnen">Bestehender Chat „' + esc(n) + '“ ↗</a>'
-            : (proj ? '<a class="chip chat" href="' + esc(claudeLink('project/' + proj)) + '" title="Im Projekt Buddy oben in der Liste">Bestehender Chat „' + esc(n) + '“ ↗</a>' : ''); }).join('')
+          return sid ? chatChip(th.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung im Projekt Buddy öffnen')
+            : (proj ? chatChip(th.id, n, claudeLink('project/' + proj), 'Im Projekt Buddy oben in der Liste') : ''); }).join('')
       + (noNew ? '' : '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '" title="Neuer Chat mit Buddy zum Thema, mit diesem Punkt als Anlass">Neuer Chat zum Thema ↗</a>') + '</div>';
   }
 
@@ -1520,8 +1542,8 @@ if (S.cockpit) {
   function paintLinks() {
     const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
       + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
-      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? '<a class="chip chat" href="' + esc(claudeLink('cowork/' + sid)) + '" title="Bestehende Sitzung öffnen">Bestehender Chat „' + esc(n) + '“ ↗</a>'
-          : '<a class="chip chat" href="' + esc(claudeLink('project/' + st.themen.buddyProject)) + '" title="Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste">Bestehender Chat „' + esc(n) + '“ ↗</a>'; }).join('')
+      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? chatChip(t.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung öffnen')
+          : chatChip(t.id, n, claudeLink('project/' + st.themen.buddyProject), 'Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste'); }).join('')
       + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Neuer Chat zum Thema ↗</a></div>').join('') : '';
     const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
     $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
