@@ -1085,7 +1085,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '10208a73be';
+  const BUILD = '3d312ae643';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1322,7 +1322,9 @@ if (S.cockpit) {
   // ---- Buddy schlägt vor (Chris 09.10.): pro Mail ein fertiger nächster Schritt, 1 Klick übernimmt, „Nein“ wird gelernt.
   // Quellen: Buddys Routine (triage.next) + gelernte Ablage (learnPick) + Einordnung. Nichts passiert ohne Klick, nie senden.
   const NX_LBL = { reply: 'Antwort-Entwurf anlegen', read: 'Gelesen', file: 'Ablegen', done: 'Erledigt', task: 'Task anlegen' };
-  function folderByName(name) { if (!name || !st.folders) return null; const n = String(name).toLowerCase().trim();
+  const SYS_LEAF = /^(sent items|gesendete elemente|gesendet|sent|drafts|entw[üu]rfe|deleted items|gel[öo]schte elemente|junk e-?mail|junk|spam|inbox|posteingang|outbox|postausgang)$/i;
+  const okFolder = f => f && !SYS_LEAF.test(f.name.split(' / ').pop().trim());   // nie in Gesendet/Entwürfe/Papierkorb ablegen
+  function folderByName(name) { if (!name || !st.folders) return null; const n = String(name).toLowerCase().trim(); if (SYS_LEAF.test(n)) return null;
     return st.folders.find(f => f.name.toLowerCase() === n) || st.folders.find(f => f.name.split(' / ').pop().toLowerCase() === n) || null; }
   function proposal(m) {
     const d = st.dec['next:' + m.internetMessageId]; if (d && (d.status === 'rejected' || d.status === 'accepted')) return null;
@@ -1633,7 +1635,7 @@ if (S.cockpit) {
     const e = Object.entries(learnScores(m)).sort((x, y) => y[1] - x[1]); if (!e.length) return null;
     const tot = e.reduce((t, x) => t + x[1], 0), [fid, top] = e[0];
     if (top < 6 || top / tot < 0.6) return null;
-    const f = st.folders.find(x => x.id === fid); return f ? { f, sure: Math.round(100 * top / tot) } : null;
+    const f = st.folders.find(x => x.id === fid); return okFolder(f) ? { f, sure: Math.round(100 * top / tot) } : null;
   }
   async function folderHints(m) {
     const folders = await loadFolders(); const byId = new Map(folders.map(f => [f.id, f])); const score = new Map();
