@@ -1085,7 +1085,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '3d312ae643';
+  const BUILD = 'ce2936d4be';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1361,6 +1361,10 @@ if (S.cockpit) {
   const nxHtml = m => { const p = proposal(m); if (!p) return '';
     return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + nxFolderSel(m, p) + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
       + '<button class="primary" data-nxok="' + esc(m.id) + '">Übernehmen</button><button data-nxno="' + esc(m.id) + '" title="Nicht passend, Buddy lernt daraus">Nein</button></div>'; };
+  document.addEventListener('change', e => { const sel = e.target.closest && e.target.closest('select[data-nxf]'); if (!sel) return;   // Beschriftung folgt der Wahl
+    const b = sel.closest('.nx').querySelector('.nxt b'); const m = st.mails.find(x => x.id === sel.dataset.nxf); const p = m && proposal(m); if (!b || !p) return;
+    const parts = p.keys.filter(k => k !== 'file').map(k => NX_LBL[k]); if (sel.value && !parts.includes(NX_LBL.read) && !m.isRead) parts.unshift(NX_LBL.read); if (sel.value) parts.push('Ablegen'); else if (!parts.length) parts.push('Nur Vorschlag schliessen');
+    b.textContent = parts.join(' + ') + (sel.value ? '' : ' (bleibt im Posteingang)'); });
   function chosenFolder(m, p) {   // Auswahl im Vorschlag hat Vorrang vor dem Vorschlag
     const sel = [...document.querySelectorAll('select[data-nxf]')].find(x => x.dataset.nxf === m.id);
     if (!sel) return p.folder || null;
