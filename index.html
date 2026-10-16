@@ -121,6 +121,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .due{ font-size:10.5px; font-weight:700; color:var(--warm); background:var(--warmbg); border-radius:5px; padding:1px 6px; white-space:nowrap; }
 .due.over{ color:var(--hot); background:var(--hotbg); }
 .hold{ font-size:10px; font-weight:700; color:var(--ink2); background:var(--holdbg); border-radius:5px; padding:1px 6px; }
+.wait{ font-size:10px; font-weight:700; color:#8a5a00; background:#fdf0d5; border-radius:5px; padding:1px 6px; }
 .chip{ font-size:10.5px; font-weight:700; border-radius:20px; padding:1px 8px; text-decoration:none; background:var(--acc2); color:var(--acc); white-space:nowrap; }
 .chatw{ display:inline-flex; align-items:center; gap:2px; } .chipx{ border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:12px; padding:2px 5px; border-radius:6px; line-height:1; } .chipx:hover{ background:var(--hotbg); color:var(--hot); }
 .chip.mail{ background:#e0f2fe; color:#0369a1; } .chip.chat{ background:#fdf0e7; color:#c2410c; } .chip.file{ background:#ecfdf3; color:#15803d; }
@@ -197,7 +198,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <h2 id="dTitle">Task bearbeiten</h2>
   <label>Titel</label><input id="eTitle" required>
   <div class="row2">
-    <div><label>Status</label><select id="eStatus"><option value="active">aktiv</option><option value="hold">on hold</option></select></div>
+    <div><label>Status</label><select id="eStatus"><option value="active">aktiv</option><option value="wait">wartet</option><option value="hold">on hold</option></select></div>
     <div><label>Frist</label><input id="eDue" type="date"></div>
     <div><label>Panel</label><select id="ePanel"></select></div>
   </div>
@@ -235,7 +236,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 // und von operations/taskboard-editor/test-core.js getestet.
 (function (root) {
   const PANEL_RE = /^##\s*(.+?)\s*\|\s*(#[0-9a-fA-F]{3,6})\s*$/;
-  const TASK_RE = /^-\s*\[(active|hold|done)\]\s*(.*)$/;
+  const TASK_RE = /^-\s*\[(active|wait|hold|done)\]\s*(.*)$/;
 
   function parseTask(text) {
     const m = text.match(TASK_RE);
@@ -288,8 +289,9 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     let n = 0;
     panels.forEach(p => {
       const act = p.tasks.filter(t => t.line.status === 'active');
+      const wait = p.tasks.filter(t => t.line.status === 'wait');            // wait zwischen active und hold: Nummern der aktiven Tasks bleiben stabil (Chris 16.10.2026)
       const hold = p.tasks.filter(t => t.line.status === 'hold');
-      p.visible = act.concat(hold);
+      p.visible = act.concat(wait).concat(hold);
       p.visible.forEach(t => { t.num = ++n; });
       p.archived = p.tasks.filter(t => t.line.status === 'done');
     });
@@ -746,6 +748,8 @@ function toast(msg, undo) {
   $('toast').style.display = 'flex'; clearTimeout(toastT); toastT = setTimeout(() => $('toast').style.display = 'none', 7000);
 }
 function fmtDue(d) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); return m ? m[3] + '.' + m[2] + '.' + m[1].slice(2) : d; }
+function waitDays(d) { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(d || ''); if (!m) return null; const t = Math.floor((Date.now() - Date.parse(m[0] + 'T00:00:00Z')) / 86400000); return t >= 0 ? t : null; }
+function waitLabel(l) { const d = waitDays(field(l, 'wait_since')), on = field(l, 'wait_on'); return 'wartet' + (d === null ? '' : ' ' + d + ' T') + (on ? ' auf ' + on : ''); }   // zeigt nur, was belegt ist (Chris 16.10.2026)
 function field(t, k) { const f = t.fields.find(x => x.key === k); return f ? f.value : ''; }
 function linksOf(t) { return field(t, 'link').split(/\s*\|\s*/).filter(Boolean); }
 function linkKind(u) {
@@ -772,14 +776,14 @@ function render() {
   keys.clear();
   const q = $('q').value.trim().toLowerCase();
   const panels = C.view(model);
-  let total = 0, arch = 0, holdN = 0;
+  let total = 0, arch = 0, holdN = 0, waitN = 0;
   const html = panels.map((p, pi) => {
     const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold'));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
-    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length;
+    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length;
     const rows = vis.map(t => {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
-      let b = l.status === 'hold' ? '<span class="hold">On-Hold</span>' : (due ? '<span class="due">⚠ ' + esc(fmtDue(due)) + '</span>' : '');
+      let b = l.status === 'hold' ? '<span class="hold">On-Hold</span>' : l.status === 'wait' ? '<span class="wait">' + esc(waitLabel(l)) + '</span>' : (due ? '<span class="due">⚠ ' + esc(fmtDue(due)) + '</span>' : '');
       tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>'); b += chipsHtml(l);
       const note = field(l, 'note');
       return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="true" data-k="' + id + '">'
@@ -808,7 +812,7 @@ function render() {
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
-  $('foot').textContent = total + ' offene Aufgaben' + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold || q ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
+  $('foot').textContent = total + ' offene Aufgaben' + (waitN ? ', ' + waitN + ' wartet' : '') + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold || q ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
   if (onRender) onRender();
 }
 $('q').oninput = () => render();
@@ -842,7 +846,7 @@ $('grid').addEventListener('keydown', e => {
 function openTask(id) {
   const i = +id.slice(1), l = model.lines[i]; editing = { id, key: keys.get(id), panel: keys.get(id).panel };
   $('dTitle').textContent = 'Task bearbeiten';
-  $('eTitle').value = l.title; $('eStatus').value = l.status === 'hold' ? 'hold' : 'active';
+  $('eTitle').value = l.title; $('eStatus').value = (l.status === 'hold' || l.status === 'wait') ? l.status : 'active';
   $('eDue').value = /^\d{4}-\d{2}-\d{2}$/.test(field(l, 'due')) ? field(l, 'due') : '';
   $('eDue').dataset.orig = field(l, 'due');
   $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note');
@@ -1086,7 +1090,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ee1668f27c';
+  const BUILD = '4f313de0f5';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1299,7 +1303,7 @@ if (S.cockpit) {
     // Board-Tasks mit Tag #wartet gehören immer in „Wartet auf“, auch wenn Buddys Lage sie auslässt (Chris 10.10.: GG fehlte)
     { const wl = document.querySelector('#v-heute li[data-wa]') ? document.querySelector('#v-heute li[data-wa]').parentElement : null;
       const have = wl ? wl.textContent.toLowerCase() : '';
-      const wt = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status === 'active' && /(^|,)\s*#?wartet\b/i.test(field(t.line, 'tags'))) : [];
+      const wt = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status === 'wait') : [];   // Status wait ersetzt den Tag #wartet (Chris 16.10.2026)
       const key = t => (t.line.title.split(/[:(]/)[0] || t.line.title).trim().toLowerCase().slice(0, 18);
       const miss = wt.filter(t => !have.includes(key(t)));
       if (miss.length && wl) { let n = wl.querySelectorAll('li').length;
@@ -1536,7 +1540,7 @@ if (S.cockpit) {
     let h = '<section class="card" style="--c:' + esc(p ? p.color : '#15803d') + '"><div class="ch"><h2>Portfolio-Tasks</h2><span class="cs">' + rows.length + ' offene Punkte, nach Frist</span>'
       + (st.registerUrl && !st.pf ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
     h += rows.length ? rows.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); const d = field(t.line, 'due');
-      return '<div class="prow' + (t.line.status === 'hold' ? ' paused' : '') + '" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
+      return '<div class="prow' + (t.line.status === 'hold' ? ' paused' : '') + '" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : t.line.status === 'wait' ? '<span class="wait">' + esc(waitLabel(t.line)) + '</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
     $('v-portfolio').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
   }
   function paintLinks() {
