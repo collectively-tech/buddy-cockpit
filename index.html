@@ -224,8 +224,14 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 <dialog id="dlgAttach"><form method="dialog" class="dlg" id="fAttach">
   <h2>Mail an Task hängen</h2>
   <div class="lhint" id="aMail"></div>
-  <label>Task</label><select id="aList" size="10"></select>
+  <label>Task</label><input id="aSearch" type="search" placeholder="Task suchen (Nummer, Wort, Panel)" autocomplete="off" style="width:100%;margin-bottom:6px"><span class="lhint" id="aCount"></span><select id="aList" size="10"></select>
   <div class="acts"><span class="sp"></span><button type="button" id="aCancel">Abbrechen</button><button type="submit" class="primary">Anhängen</button></div>
+</form></dialog>
+
+<dialog id="dlgPick"><form method="dialog" class="dlg" id="fPick">
+  <h2 id="kTitle">Auswählen</h2>
+  <input id="kSearch" type="search" placeholder="Suchen" autocomplete="off" style="width:100%;margin-bottom:6px"><span class="lhint" id="kCount"></span><select id="kList" size="12"></select>
+  <div class="acts"><span class="sp"></span><button type="button" id="kCancel">Abbrechen</button><button type="submit" class="primary">Wählen</button></div>
 </form></dialog>
 
 <div class="toast" id="toast"><span id="toastMsg"></span><button id="toastUndo" style="display:none">Rückgängig</button></div>
@@ -514,7 +520,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 (function () {
   const CFG = window.TB_CONFIG || {};
   const G = 'https://graph.microsoft.com/v1.0';
-  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Mail.ReadWrite', 'Calendars.Read'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send (Senden technisch unmöglich)
+  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Mail.ReadWrite', 'Calendars.ReadWrite'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send (Senden technisch unmöglich). Calendars.ReadWrite (Chris 19.10.): nur eigene Termine ohne Teilnehmer (Fristen + Vorwarnung)
   let app = null, account = null, item = null, backupCount = 0;
 
   async function token() {
@@ -533,6 +539,16 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
     item = await r.json(); return item;
   }
   function stamp() { const d = new Date(), p = n => String(n).padStart(2, '0'); return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()); }
+
+  // Entwurfstext als HTML (Chris 18.10.: Umbrüche und Aufzählungen gingen verloren). Bereits HTML bleibt unverändert.
+  function draftHtml(t) {
+    t = String(t || ''); if (/<(p|br|ul|ol|li|div)\b/i.test(t)) return t;
+    const e = x => x.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return t.split(/\n{2,}/).map(block => { const ls = block.split('\n');
+      if (ls.every(l => /^\s*([*\-\u2022]|\d+[.)])\s+/.test(l))) { const ord = /^\s*\d/.test(ls[0]);
+        return (ord ? '<ol>' : '<ul>') + ls.map(l => '<li>' + e(l.replace(/^\s*([*\-\u2022]|\d+[.)])\s+/, '')) + '</li>').join('') + (ord ? '</ol>' : '</ul>'); }
+      return '<p>' + ls.map(e).join('<br>') + '</p>'; }).join('');
+  }
 
   window.TBStore = {
     label: 'OneDrive',
@@ -564,7 +580,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!m['@microsoft.graph.downloadUrl']) throw new Error('Kein Download-Link fuer board.md');
       const r = await fetch(m['@microsoft.graph.downloadUrl']);
       if (!r.ok) throw new Error('Download fehlgeschlagen (' + r.status + ')');
-      return { text: await r.text(), etag: m.eTag };
+  return { text: await r.text(), etag: m.eTag };
     },
     async version() { return (await meta()).eTag; },
     async write(text, etag) {
@@ -647,6 +663,15 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Suche fehlgeschlagen (' + r.status + ')');
       return ((await r.json()).value || []);
     },
+    async createEvent(subject, startIso, minutes, reminderMin, body) {   // Frist-/Erinnerungstermin im EIGENEN Kalender (Chris 19.10.). Bewusst ohne Teilnehmer: es geht keine Einladung raus.
+      if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startIso || '')) throw new Error('Ungültige Startzeit');
+      const st = new Date(startIso + ':00'), en = new Date(st.getTime() + (minutes || 30) * 60000), f = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':00';
+      const ev = { subject: String(subject || '').slice(0, 250), start: { dateTime: f(st), timeZone: 'Europe/Zurich' }, end: { dateTime: f(en), timeZone: 'Europe/Zurich' },
+        isReminderOn: reminderMin != null, reminderMinutesBeforeStart: reminderMin == null ? 0 : reminderMin, showAs: 'free', importance: 'high', attendees: [], body: { contentType: 'HTML', content: draftHtml(body || '') } };
+      const r = await g('POST', '/me/events', JSON.stringify(ev), { 'Content-Type': 'application/json', Prefer: 'outlook.timezone="Europe/Zurich"' });
+      if (!r.ok) throw new Error('Termin nicht angelegt (' + r.status + ')');
+      const d = await r.json(); return { id: d.id, webLink: d.webLink };
+    },
     async moveMessage(messageId, folderId) {   // Mail in einen Ordner verschieben (Chris 06.10.: verschieben ja, senden nein). Nur auf Klick, nie automatisch. Kein Löschen.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(folderId)) throw new Error('Ungültige ID');
       const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/move', JSON.stringify({ destinationId: folderId }), { 'Content-Type': 'application/json' });
@@ -655,20 +680,20 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
     },
     async createReplyDraft(messageId, text) {   // Schreibzugriffe aufs Postfach: nur Entwürfe anlegen und (auf Klick) verschieben. Kein Senden, kein Löschen im Code.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
-      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: text }), { 'Content-Type': 'application/json' });
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: draftHtml(text) }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
     async createReplyAllDraft(messageId, text) {   // Allen antworten, NUR als Entwurf
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
-      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReplyAll', JSON.stringify({ comment: text || '' }), { 'Content-Type': 'application/json' });
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReplyAll', JSON.stringify({ comment: draftHtml(text) }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
     async createForwardDraft(messageId, to, text) {   // Weiterleitung NUR als Entwurf anlegen (mit Anhängen), Senden macht Chris in Outlook
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
       if (!/^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i.test(to || '')) throw new Error('Ungültige Empfängeradresse');
-      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createForward', JSON.stringify({ comment: text || '', toRecipients: [{ emailAddress: { address: to } }] }), { 'Content-Type': 'application/json' });
+      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createForward', JSON.stringify({ comment: draftHtml(text), toRecipients: [{ emailAddress: { address: to } }] }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Weiterleitungs-Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
@@ -850,7 +875,7 @@ function openTask(id) {
   $('eDue').value = /^\d{4}-\d{2}-\d{2}$/.test(field(l, 'due')) ? field(l, 'due') : '';
   $('eDue').dataset.orig = field(l, 'due');
   $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note');
-  $('ePanel').innerHTML = C.view(model).map(p => '<option' + (p.name === editing.panel ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('');
+  $('ePanel').innerHTML = panelOptions(editing.panel);
   $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
   $('eTopic').innerHTML = ''; if (onTaskOpen) onTaskOpen(l);
   $('ePos').value = ''; $('eArchive').style.display = ''; $('dlgTask').showModal();
@@ -862,7 +887,7 @@ function openNewTask(pre) {
   $('dTitle').textContent = 'Neuer Task';
   $('eTitle').value = pre.title || ''; $('eStatus').value = 'active'; $('eDue').value = ''; $('eDue').dataset.orig = '';
   $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || '';
-  $('ePanel').innerHTML = panels.map(n => '<option' + (n === def ? ' selected' : '') + '>' + esc(n) + '</option>').join('');
+  $('ePanel').innerHTML = panelOptions(def);
   $('eTopic').innerHTML = '';
   $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
 }
@@ -899,6 +924,32 @@ $('fTask').onsubmit = e => {
 $('eArchive').onclick = () => { const id = editing.id; $('dlgTask').close(); archive(id); };
 
 // ---------- Panel-Dialog ----------
+// Panel-Auswahl überall mit „+ Neues Panel …“ (Chris 19.10.): legt das Panel sofort an und wählt es aus
+function panelOptions(sel) { return C.view(model).map(p => '<option' + (p.name === sel ? ' selected' : '') + '>' + esc(p.name) + '</option>').join('') + '<option value="__newpanel">+ Neues Panel …</option>'; }
+let panelResolve = null;
+function newPanelFlow() { return new Promise(res => { panelResolve = res; openPanel(null); }); }
+document.addEventListener('focusin', e => { const s = e.target; if (s && s.tagName === 'SELECT' && s.querySelector('option[value="__newpanel"]')) s.dataset.prev = s.value; });
+document.addEventListener('change', async e => { const s = e.target; if (!s || s.tagName !== 'SELECT' || s.value !== '__newpanel') return;
+  const prev = s.dataset.prev && s.dataset.prev !== '__newpanel' ? s.dataset.prev : (s.options[0] ? s.options[0].value : '');
+  const name = await newPanelFlow();
+  document.querySelectorAll('select').forEach(x => { if (!x.querySelector('option[value="__newpanel"]')) return; const v = x === s ? (name || prev) : x.value; x.innerHTML = panelOptions(v); x.value = v; });
+  if (name) s.dispatchEvent(new Event('change', { bubbles: true })); });
+// generischer Auswahl-Dialog mit Textsuche (z.B. Mail-Ordner)
+let pickResolve = null;
+function pickFromList(title, items, placeholder) { return new Promise(res => {
+  pickResolve = res; $('kTitle').textContent = title; $('kSearch').placeholder = placeholder || 'Suchen';
+  $('kList').innerHTML = items.map(i => '<option value="' + esc(i.value) + '">' + esc(i.text) + '</option>').join('');
+  $('kSearch').value = ''; filterPick(); $('dlgPick').showModal(); $('kSearch').focus(); }); }
+function filterPick() { const q = ($('kSearch').value || '').toLowerCase().split(/\s+/).filter(Boolean); let first = null, n = 0;
+  [...$('kList').options].forEach(o => { const hit = q.every(w => o.text.toLowerCase().includes(w)); o.hidden = !hit; if (hit) { n++; if (!first) first = o; } });
+  if (first && (!$('kList').value || $('kList').selectedOptions[0].hidden)) $('kList').value = first.value; if (!first) $('kList').value = '';
+  $('kCount').textContent = q.length ? n + ' Treffer' : ''; }
+$('kSearch').addEventListener('input', filterPick);
+$('kSearch').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { e.preventDefault(); $('kList').focus(); } });
+$('kList').addEventListener('dblclick', () => $('fPick').requestSubmit ? $('fPick').requestSubmit() : $('fPick').dispatchEvent(new Event('submit', { cancelable: true })));
+$('fPick').onsubmit = e => { e.preventDefault(); const v = $('kList').value || null; const r = pickResolve; pickResolve = null; $('dlgPick').close(); if (r) r(v); };
+$('kCancel').onclick = () => $('dlgPick').close();
+$('dlgPick').addEventListener('close', () => { const r = pickResolve; pickResolve = null; if (r) r(null); });
 function openPanel(name) {
   editingPanel = name; const p = C.view(model).find(x => x.name === name);
   $('pTitle').textContent = name ? 'Panel bearbeiten' : 'Neues Panel';
@@ -913,10 +964,10 @@ function panelShift(dir) {
   if (dir > 0 && i < names.length - 1) commit({ type: 'movePanel', name, before: names[i + 2] || null });
 }
 $('pLeft').onclick = () => panelShift(-1); $('pRight').onclick = () => panelShift(1);
-$('dlgPanel').addEventListener('close', () => { editingPanel = null; });
+$('dlgPanel').addEventListener('close', () => { editingPanel = null; const r = panelResolve; panelResolve = null; if (r) r(null); });
 $('fPanel').onsubmit = e => {
-  e.preventDefault(); const name = editingPanel; const nn = $('pName').value, col = $('pColor').value; $('dlgPanel').close();
-  if (name) commit({ type: 'editPanel', name, newName: nn, color: col }); else commit({ type: 'addPanel', name: nn, color: col });
+  e.preventDefault(); const name = editingPanel; const nn = $('pName').value, col = $('pColor').value; const r = panelResolve; panelResolve = null; $('dlgPanel').close();
+  if (name) commit({ type: 'editPanel', name, newName: nn, color: col }); else commit({ type: 'addPanel', name: nn, color: col }).then(okay => { if (r) r(okay ? C.clean(nn).replace(/\|/g, '/') : null); if (okay && r) toast('Panel angelegt: ' + C.clean(nn)); });
 };
 $('pDelete').onclick = () => { const name = editingPanel; $('dlgPanel').close(); if (confirm('Panel "' + name + '" löschen? Geht nur, wenn es keine Tasks (auch keine archivierten) mehr enthält.')) commit({ type: 'deletePanel', name }); };
 
@@ -949,6 +1000,7 @@ $('grid').addEventListener('drop', e => {
 //  linkKind, chipsHtml, buddyUrl, onRender, cockpitStart).
 // LESEND: Mails (ganzer Posteingang), Termine, Briefing, Links. Geschrieben wird nur board.md via commit().
 if (S.cockpit) {
+  const SPSEL = {};   // gewähltes Panel je Vorschlag, überlebt das Neuzeichnen (Chris 19.10.)
   const P = {
     briefings: 'AI-CoS/knowledge/briefings',
     triage: 'AI-CoS/knowledge/cockpit/mail-triage.json',
@@ -1090,7 +1142,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '4f313de0f5';
+  const BUILD = 'acf478ea74';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1257,7 +1309,7 @@ if (S.cockpit) {
     d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
     d += '</section>';
-    const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id]);
+    const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id] && !(x.action === 'done' && taskDoneByTitle(x.title)));   // schon erledigte Tasks nicht mehr zum Abhaken vorschlagen (Chris 19.10.)
     let v = '';
     {
       const stand = st.triageDate ? 'Stand ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'noch kein Lauf';
@@ -1272,7 +1324,7 @@ if (S.cockpit) {
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span><span class="sa">'
           + (x.link ? mailChipLabel(x.link, 'Mail') : '')
-          + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.', true) + '<button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</span></div>').join('')
+          + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.', true) + '<select class="spanel" data-spanel="' + esc(x.id) + '" title="Panel">' + panelOptions(SPSEL[x.id] && C.view(model).some(p => p.name === SPSEL[x.id]) ? SPSEL[x.id] : C.view(model).some(p => p.name === x.panel) ? x.panel : (C.view(model)[0] || {}).name) + '</select><button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</span></div>').join('')
         + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span><span class="sa">'
           + (x.evidence && /^https?:/.test(x.evidence) ? (itemIdOf(x.evidence) ? mailChipLabel(x.evidence, 'Beleg') : '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>') : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.', true) + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hhold="' + esc(x.id) + '" title="Task bleibt im Board, aber pausiert (On-Hold), Frist bleibt">On-Hold</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</span></div>').join('')
@@ -1376,12 +1428,24 @@ if (S.cockpit) {
     return { a, keys, label, why, folder: a.file || null, safe: keys.every(k => k === 'read' || k === 'file' || k === 'done') };
   }
   // Ordner direkt im Vorschlag wählbar: vorbelegt mit dem gelernten/Buddys Ordner, änderbar, „nicht ablegen“ möglich (Chris 10.10.)
+  // Ordner per Textsuche finden (Chris 19.10.): Eintrag „Ordner suchen …“ in jeder Ordnerauswahl öffnet den Suchdialog
+  document.addEventListener('change', e => { const s = e.target; if (s && s.dataset && s.dataset.spanel && s.value !== '__newpanel') SPSEL[s.dataset.spanel] = s.value; });
+  const FSEARCH = '<option value="__fsearch">Ordner suchen …</option>';
+  async function searchFolderInto(sel) {
+    const prev = sel.dataset.prev && sel.dataset.prev !== '__fsearch' ? sel.dataset.prev : ''; sel.value = prev;
+    const all = await loadFolders().catch(() => []); const id = await pickFromList('Ordner suchen', all.map(f => ({ value: f.id, text: f.name })), 'Ordner suchen (Wort, Teil des Pfads)');
+    if (!id) return; if (![...sel.options].some(o => o.value === id)) { const f = all.find(x => x.id === id); sel.insertAdjacentHTML('beforeend', '<option value="' + esc(id) + '">' + esc(f ? f.name : id) + '</option>'); }
+    sel.value = id; sel.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  document.addEventListener('focusin', e => { const s = e.target; if (s && s.tagName === 'SELECT' && s.querySelector('option[value="__fsearch"]')) s.dataset.prev = s.value; });
+  document.addEventListener('change', e => { const s = e.target; if (s && s.tagName === 'SELECT' && s.value === '__fsearch') { e.stopImmediatePropagation(); searchFolderInto(s); } }, true);
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-fsearch]'); if (!b) return; const sel = b.parentElement.querySelector('select[data-fpick]'); if (sel) { sel.dataset.prev = ''; searchFolderInto(sel); } });
   function nxFolderSel(m, p) {
     if (!S.moveMessage || p.a.reply || p.a.task) return '';
     const fs = st.folders || [], cur = p.folder ? p.folder.id : '';
     const opts = '<option value=""' + (cur ? '' : ' selected') + '>' + (cur ? 'nicht ablegen' : 'Ordner wählen (optional) …') + '</option>'
       + (p.folder && !fs.some(f => f.id === p.folder.id) ? '<option value="' + esc(p.folder.id) + '" selected>' + esc(p.folder.name) + '</option>' : '')
-      + fs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('');
+      + fs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('') + FSEARCH;
     return ' <select class="nxf" data-nxf="' + esc(m.id) + '" title="Ordner: vorgeschlagen aus deiner Ablage, hier änderbar">' + opts + '</select>';
   }
   const nxHtml = m => { const p = proposal(m); if (!p) return '';
@@ -1693,7 +1757,7 @@ if (S.cockpit) {
     b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span>'
       + hints.map(f => '<button class="primary" data-fmove="' + esc(f.id) + '" title="' + esc(f.name) + '">' + esc(f.name.split(' / ').pop()) + '</button>').join('')
       + (hints.length ? '' : '<span class="fbl">Kein Vorschlag aus früheren Mails.</span>')
-      + '<select data-fpick="1"><option value="">Anderer Ordner …</option>' + all.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + '</select>'
+      + '<button data-fsearch="1">Ordner suchen …</button><select data-fpick="1"><option value="">Anderer Ordner …</option>' + all.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + FSEARCH + '</select>'
       + '<button data-fkeep="1">In Inbox lassen</button>';
   }
   async function doMove(mid, fid, quiet) {
@@ -1727,6 +1791,7 @@ if (S.cockpit) {
   });
   document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
 
+  const taskDoneByTitle = title => !!model && model.lines.some(l => l && l.title === title && l.status === 'done');
   function findTaskByTitle(title) {
     const t = model && C.view(model).flatMap(p => p.visible).find(x => x.line.title === title);
     return t ? C.keyOf(model, t.idx) : null;
@@ -1794,11 +1859,13 @@ if (S.cockpit) {
     if (btn) { if (btn.disabled) return; const row = btn.closest('.prow'); busy = [...row.querySelectorAll('button')]; busy.forEach(b => { b.disabled = true; }); btn.dataset.lbl = btn.textContent; btn.textContent = 'Wird gespeichert …'; row.classList.add('busy'); }
     const unbusy = () => { if (!busy) return; busy.forEach(b => { b.disabled = false; }); btn.textContent = btn.dataset.lbl; btn.closest('.prow').classList.remove('busy'); };
     if (sa) { const x = st.sug.find(y => y.id === sa.dataset.sacc); if (!x) { unbusy(); return; }
-      const panels = C.view(model).map(p => p.name); const panel = panels.includes(x.panel) ? x.panel : panels[0];
+      const panels = C.view(model).map(p => p.name); const ps = [...document.querySelectorAll('select[data-spanel]')].find(y => y.dataset.spanel === x.id);
+      const panel = ps && panels.includes(ps.value) ? ps.value : panels.includes(x.panel) ? x.panel : panels[0];
       const okay = await commit({ type: 'add', panel, title: x.title, due: x.due || '', note: x.note || x.why || '', link: x.link || '' });
       if (okay) { toast('Task übernommen: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } else unbusy(); return; }
     if (sr) { decide(sr.dataset.srej, 'rejected'); return; }
     if (ha) { const x = st.hyg.find(y => y.id === ha.dataset.hacc); if (!x) return; const key = findTaskByTitle(x.title);
+      if (!key && x.action === 'done' && taskDoneByTitle(x.title)) { decide(x.id, 'accepted'); toast('War schon erledigt: ' + x.title.slice(0, 60)); return; }
       if (!key) { toast('Task nicht mehr im Board gefunden (inzwischen geändert?)'); unbusy(); return; }
       const okay = x.action === 'done' ? await commit({ type: 'status', key, status: 'done' }) : await commit({ type: 'edit', key, due: x.due || '' });
       if (okay) { toast(x.action === 'done' ? 'Abgehakt: ' + x.title.slice(0, 60) : 'Frist gesetzt: ' + x.title.slice(0, 60)); decide(x.id, 'accepted'); } else unbusy(); return; }
@@ -1813,9 +1880,19 @@ if (S.cockpit) {
   function attachDialog(m) {
     const all = C.view(model).flatMap(p => p.visible.map(t => ({ t, p })));
     $('aList').innerHTML = all.map(({ t, p }) => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return '<option value="' + id + '">' + t.num + '/ ' + esc(t.line.title.slice(0, 90)) + ' · ' + esc(p.name) + '</option>'; }).join('');
+    $('aSearch').value = ''; filterAttach();
     $('aMail').textContent = (m.subject || '(ohne Betreff)') + ' · ' + fromOf(m);
-    $('dlgAttach').dataset.mid = m.id; $('dlgAttach').showModal();
+    $('dlgAttach').dataset.mid = m.id; $('dlgAttach').showModal(); $('aSearch').focus();
   }
+  function filterAttach() {   // Suche im Task-Auswahlfeld (Chris 19.10.): alle Wörter müssen vorkommen
+    const q = ($('aSearch').value || '').toLowerCase().split(/\s+/).filter(Boolean); let first = null, n = 0;
+    [...$('aList').options].forEach(o => { const hit = q.every(w => o.text.toLowerCase().includes(w)); o.hidden = !hit; if (hit) { n++; if (!first) first = o; } });
+    if (first && (!$('aList').value || $('aList').selectedOptions[0].hidden)) $('aList').value = first.value;
+    if (!first) $('aList').value = '';
+    $('aCount').textContent = q.length ? n + ' Treffer' : '';
+  }
+  $('aSearch').addEventListener('input', filterAttach);
+  $('aSearch').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { e.preventDefault(); $('aList').focus(); } });
   $('fAttach').onsubmit = e => {
     e.preventDefault(); const m = st.mails.find(x => x.id === $('dlgAttach').dataset.mid); const id = $('aList').value; $('dlgAttach').close();
     if (!m || !id) return; const t = model.lines[+id.slice(1)]; const links = linksOf(t);
