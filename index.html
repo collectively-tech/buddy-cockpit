@@ -1126,6 +1126,12 @@ if (S.cockpit) {
     const f = await S.readPath(P.jobs).catch(() => null);
     try { st.jobs = f && f.text ? JSON.parse(f.text) : null; } catch (e) { st.jobs = null; st.err.jobs = 'jobs-queue.json nicht lesbar'; }
   }
+  function mergeJobs(q) {   // Routine liefert neue Aufträge in mail-triage.json (jobsQueue), OneDrive-Datei bleibt Basis; gleiche ID nur einmal
+    if (!st.jobs) { st.jobs = q; return; }
+    const have = new Set((st.jobs.items || []).map(x => x.id));
+    st.jobs.items = (st.jobs.items || []).concat((q.items || []).filter(x => !have.has(x.id)));
+    if (q.title) st.jobs.title = q.title;
+  }
   const jobsOpen = () => (st.jobs && st.jobs.items || []).filter(x => !st.dec['jobs:' + x.id]);
   function jobsCard() {
     const q = st.jobs; if (!q || !(q.items || []).length) return '';
@@ -1185,7 +1191,7 @@ if (S.cockpit) {
       try { const j = await ghTriage(); const odDate = st.triageDate;
         if (j && j.generated && (!odDate || Date.parse(j.generated) > Date.parse(odDate))) mirrorToOneDrive(j).catch(e => console.log('mirror', e && e.message));
         if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
-          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
+          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; st.jobsGh = j.jobsQueue && (j.jobsQueue.items || []).length ? j.jobsQueue : null; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
         delete st.err.gh;
       } catch (e) { st.err.gh = e.message; }
     }
@@ -1211,7 +1217,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '4328f69803';
+  const BUILD = '14ea53887d';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1225,6 +1231,7 @@ if (S.cockpit) {
     checkVersion();
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks, jobs: loadJobs };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
+    if (st.jobsGh) mergeJobs(st.jobsGh);
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
     if (pending()) pollGh(); else autoRun();
