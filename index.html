@@ -530,7 +530,7 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
 (function () {
   const CFG = window.TB_CONFIG || {};
   const G = 'https://graph.microsoft.com/v1.0';
-  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Mail.ReadWrite', 'Calendars.ReadWrite'];   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send (Senden technisch unmöglich). Calendars.ReadWrite (Chris 19.10.): nur eigene Termine ohne Teilnehmer (Fristen + Vorwarnung)
+  const SCOPES = ['User.Read', 'Files.ReadWrite', 'Mail.Read', 'Mail.ReadWrite', 'Mail.ReadWrite.Shared', 'Calendars.ReadWrite'];   // Mail.ReadWrite.Shared (Chris 20.10.): nur fuer Postfaecher in SHARED_MB, nur Entwurf und gelesen   // alle delegiert, nur eigenes Konto; bewusst KEIN Mail.Send (Senden technisch unmöglich). Calendars.ReadWrite (Chris 19.10.): nur eigene Termine ohne Teilnehmer (Fristen + Vorwarnung)
   let app = null, account = null, item = null, backupCount = 0;
 
   async function token() {
@@ -558,6 +558,15 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (ls.every(l => /^\s*([*\-\u2022]|\d+[.)])\s+/.test(l))) { const ord = /^\s*\d/.test(ls[0]);
         return (ord ? '<ol>' : '<ul>') + ls.map(l => '<li>' + e(l.replace(/^\s*([*\-\u2022]|\d+[.)])\s+/, '')) + '</li>').join('') + (ord ? '</ol>' : '</ul>'); }
       return '<p>' + ls.map(e).join('<br>') + '</p>'; }).join('');
+  }
+
+  // Geteilte Postfaecher (Chris 20.10.): nur diese Liste, nur Entwurf anlegen und gelesen setzen. Ohne Angabe: eigenes Postfach.
+  const SHARED_MB = ['jobs@bluehorizon.com'];
+  function mbase(mb) {
+    if (!mb) return '/me';
+    const m = String(mb).trim().toLowerCase();
+    if (!SHARED_MB.includes(m)) throw new Error('Postfach nicht freigegeben: ' + m);
+    return '/users/' + encodeURIComponent(m);
   }
 
   window.TBStore = {
@@ -648,9 +657,9 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Schreiben fehlgeschlagen (' + r.status + ')');
       return true;
     },
-    async setRead(messageId, isRead) {   // als gelesen/ungelesen markieren (Chris 09.10.), nur auf Klick
+    async setRead(messageId, isRead, mailbox) {   // als gelesen/ungelesen markieren (Chris 09.10.), nur auf Klick
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
-      const r = await g('PATCH', '/me/messages/' + encodeURIComponent(messageId), JSON.stringify({ isRead: !!isRead }), { 'Content-Type': 'application/json' });
+      const r = await g('PATCH', mbase(mailbox) + '/messages/' + encodeURIComponent(messageId), JSON.stringify({ isRead: !!isRead }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Gelesen-Status nicht gesetzt (' + r.status + ')');
       return true;
     },
@@ -696,9 +705,9 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
-    async createReplyDraft(messageId, text) {   // Schreibzugriffe aufs Postfach: nur Entwürfe anlegen und (auf Klick) verschieben. Kein Senden, kein Löschen im Code.
+    async createReplyDraft(messageId, text, mailbox) {   // Schreibzugriffe aufs Postfach: nur Entwürfe anlegen und (auf Klick) verschieben. Kein Senden, kein Löschen im Code.
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
-      const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: draftHtml(text) }), { 'Content-Type': 'application/json' });
+      const r = await g('POST', mbase(mailbox) + '/messages/' + encodeURIComponent(messageId) + '/createReply', JSON.stringify({ comment: draftHtml(text) }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
@@ -1028,12 +1037,13 @@ if (S.cockpit) {
     themen: 'AI-CoS/knowledge/cockpit/themen.json',
     decisions: 'AI-CoS/knowledge/cockpit/decisions.json',
     refresh: 'AI-CoS/knowledge/cockpit/refresh-request.json',
-    portfolio: 'AI-CoS/knowledge/cockpit/portfolio.json'
+    portfolio: 'AI-CoS/knowledge/cockpit/portfolio.json',
+    jobs: 'AI-CoS/knowledge/cockpit/jobs-queue.json'   // Antworten fuer geteilte Postfaecher (jobs@), schreibt Buddy, Chris loest per Klick aus (20.10.)
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
   const PAGE = 40;
   const st = { brief: null, briefDate: null, needs: 0, cal: [], mails: [], inbox: null, triage: {}, triageDate: null,
-    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {}, req: null, pf: null };
+    links: null, registerUrl: null, err: {}, shown: {}, mq: '', loading: false, focus: null, themen: null, sug: [], hyg: [], dec: {}, req: null, pf: null, jobs: null, jobsRun: false };
   const today = () => new Date().toLocaleDateString('sv-SE');
   const hm = d => (d || '').slice(11, 16);
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -1111,6 +1121,47 @@ if (S.cockpit) {
     // ganztägige Termine enden um 00:00 des Folgetags: ein Termin von gestern endet heute 00:00 und gehört NICHT zu heute
     st.cal = (r.value || []).filter(e => !e.isCancelled && (!e.isAllDay || (e.start.dateTime.slice(0, 10) <= ts && e.end.dateTime.slice(0, 10) > ts)));
   }
+  // ---- Warteschlange fuer geteilte Postfaecher (jobs@): Buddy legt Auftraege ab, Chris loest per Klick aus, nie Senden ----
+  async function loadJobs() {
+    const f = await S.readPath(P.jobs).catch(() => null);
+    try { st.jobs = f && f.text ? JSON.parse(f.text) : null; } catch (e) { st.jobs = null; st.err.jobs = 'jobs-queue.json nicht lesbar'; }
+  }
+  const jobsOpen = () => (st.jobs && st.jobs.items || []).filter(x => !st.dec['jobs:' + x.id]);
+  function jobsCard() {
+    const q = st.jobs; if (!q || !(q.items || []).length) return '';
+    const open = jobsOpen(), done = q.items.filter(x => st.dec['jobs:' + x.id]), mb = q.mailbox || '';
+    const nRep = open.filter(x => x.kind === 'reply').length, nRead = open.filter(x => x.kind === 'read').length;
+    if (!open.length && !done.some(x => st.dec['jobs:' + x.id].status === 'error')) return '';
+    const row = x => { const d = st.dec['jobs:' + x.id];
+      return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Gelesen:' : 'Entwurf:') + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + (x.note ? ' · ' + esc(x.note) : '') + '</small></span>'
+        + (d ? (d.status === 'error' ? '<span class="cs" style="color:var(--err,#c00)">Fehler: ' + esc(d.error || '') + '</span>' : (d.webLink ? '<a class="chip" href="' + esc(d.webLink) + '" target="outlook">Entwurf ↗</a>' : '<span class="cs">erledigt</span>')) : '') + '</div>'; };
+    return '<section class="card sugcard"><div class="ch"><h2>Antworten ' + esc(mb) + '</h2><span class="cs">' + esc(q.title || '') + ' · ' + nRep + ' Entwürfe, ' + nRead + ' nur gelesen · es wird nichts gesendet</span>'
+      + (open.length ? '<button class="primary" id="btnJobsRun"' + (st.jobsRun ? ' disabled' : '') + '>' + (st.jobsRun ? 'Läuft …' : (open.length + ' ausführen')) + '</button>' : '')
+      + ' <a class="btn ghost" href="https://outlook.office.com/mail/' + encodeURIComponent(mb) + '/drafts" target="outlook">Entwürfe in ' + esc(mb) + ' ↗</a></div>'
+      + q.items.map(row).join('') + '</section>';
+  }
+  async function runJobs() {
+    if (st.jobsRun) return; const q = st.jobs; if (!q) return; const mb = q.mailbox;
+    st.jobsRun = true; paintHeute(); let ok = 0, bad = 0;
+    for (const x of jobsOpen()) {
+      try {
+        let r = null;
+        if (x.kind === 'reply') r = await S.createReplyDraft(x.id, x.html, mb);
+        if (x.kind === 'reply' || x.kind === 'read') await S.setRead(x.id, true, mb);
+        st.dec['jobs:' + x.id] = { status: 'done', at: new Date().toISOString(), kind: x.kind, to: x.to || '', webLink: r && r.webLink || '' }; ok++;
+      } catch (e) { st.dec['jobs:' + x.id] = { status: 'error', at: new Date().toISOString(), error: e.message }; bad++; }
+      setStatus('Antworten ' + mb + ': ' + ok + ' erledigt' + (bad ? ', ' + bad + ' Fehler' : ''), bad ? 'err' : 'ok');
+    }
+    try {
+      const cur = await S.readPath(P.decisions).catch(() => null);
+      let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
+      const add = {}; (q.items || []).forEach(x => { if (st.dec['jobs:' + x.id]) add['jobs:' + x.id] = st.dec['jobs:' + x.id]; });
+      d.items = Object.assign(d.items || {}, add); await S.writePath(P.decisions, JSON.stringify(d, null, 1));
+    } catch (e) { setStatus('Status nicht gespeichert: ' + e.message, 'err'); }
+    st.jobsRun = false; paintHeute();
+  }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('#btnJobsRun'); if (!b) return; e.preventDefault(); runJobs(); });
+
   async function loadMails() {
     // ALLE Mails im Posteingang, seitenweise (100 je Abruf), nur Kopfdaten
     const [box, all] = await Promise.all([
@@ -1160,7 +1211,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '835e822b96';
+  const BUILD = '4328f69803';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1172,7 +1223,7 @@ if (S.cockpit) {
   async function loadAll() {
     if (st.loading) return; st.loading = true; st.err = {};
     checkVersion();
-    const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks };
+    const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks, jobs: loadJobs };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
@@ -1348,7 +1399,7 @@ if (S.cockpit) {
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.', true) + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hhold="' + esc(x.id) + '" title="Task bleibt im Board, aber pausiert (On-Hold), Frist bleibt">On-Hold</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</span></div>').join('')
         + '</section>';
     }
-    $('v-heute').innerHTML = v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+    $('v-heute').innerHTML = jobsCard() + v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
       let linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
       if (!linked.length) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
