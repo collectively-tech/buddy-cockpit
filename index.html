@@ -208,7 +208,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <div class="lhint">Chat-Link: im Claude-Chat oben „Teilen“ bzw. Adresse kopieren und hier einfügen. Mails hängst du im Reiter Mails mit „An Task hängen“ an.</div>
   <label>Notiz</label><textarea id="eNote"></textarea>
   <div id="eTopic"></div>
-  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener" title="Neuer Chat mit Buddy zu diesem Task">Neuer Chat zum Task</a><span class="sp"></span>
+  <div class="acts"><button type="button" class="danger" id="eArchive">Archivieren</button><button type="button" class="ghost" id="eMail" style="display:none" title="Neue Mail als Entwurf, Betreff = Task">✉ Neue Mail</button><a class="btn ghost" id="eBuddy" target="_blank" rel="noopener" title="Neuer Chat mit Buddy zu diesem Task">Neuer Chat zum Task</a><span class="sp"></span>
     <button type="button" id="eCancel">Abbrechen</button><button type="submit" class="primary">Speichern</button></div>
 </form></dialog>
 
@@ -226,6 +226,16 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <div class="lhint" id="aMail"></div>
   <label>Task</label><input id="aSearch" type="search" placeholder="Task suchen (Nummer, Wort, Panel)" autocomplete="off" style="width:100%;margin-bottom:6px"><span class="lhint" id="aCount"></span><select id="aList" size="10"></select>
   <div class="acts"><span class="sp"></span><button type="button" id="aCancel">Abbrechen</button><button type="submit" class="primary">Anhängen</button></div>
+</form></dialog>
+
+<dialog id="dlgNewMail"><form method="dialog" class="dlg" id="fNewMail">
+  <h2>Neue Mail (Entwurf)</h2>
+  <div class="lhint" id="nmCtx"></div>
+  <label>An</label><input id="nmTo" list="nmAddr" placeholder="Name oder Adresse, mehrere mit Komma" autocomplete="off" required><datalist id="nmAddr"></datalist>
+  <label>Betreff</label><input id="nmSubj">
+  <label>Text (optional)</label><textarea id="nmText" rows="6" placeholder="Leer lassen und in Outlook schreiben"></textarea>
+  <div class="lhint">Wird nur als Entwurf angelegt und in Outlook geöffnet. Senden machst du.</div>
+  <div class="acts"><span class="sp"></span><button type="button" id="nmCancel">Abbrechen</button><button type="submit" class="primary">Entwurf anlegen</button></div>
 </form></dialog>
 
 <dialog id="dlgPick"><form method="dialog" class="dlg" id="fPick">
@@ -676,6 +686,14 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId) || !/^[A-Za-z0-9_=+\-\/]+$/.test(folderId)) throw new Error('Ungültige ID');
       const r = await g('POST', '/me/messages/' + encodeURIComponent(messageId) + '/move', JSON.stringify({ destinationId: folderId }), { 'Content-Type': 'application/json' });
       if (!r.ok) throw new Error('Verschieben fehlgeschlagen (' + r.status + ')');
+      const d = await r.json(); return { id: d.id, webLink: d.webLink };
+    },
+    async createNewDraft(to, subject, text) {   // Neue Mail NUR als Entwurf (Chris 20.10.): an beliebige Empfänger, Senden macht Chris in Outlook
+      const list = (Array.isArray(to) ? to : String(to || '').split(/[,;\s]+/)).map(x => x.trim()).filter(Boolean);
+      if (list.some(a => !/^[^\s@<>"]+@[^\s@<>"]+\.[a-z]{2,}$/i.test(a))) throw new Error('Ungültige Empfängeradresse');
+      const msg = { subject: String(subject || '').slice(0, 250), body: { contentType: 'HTML', content: draftHtml(text || '') }, toRecipients: list.map(a => ({ emailAddress: { address: a } })) };
+      const r = await g('POST', '/me/messages', JSON.stringify(msg), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Entwurf nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
     },
     async createReplyDraft(messageId, text) {   // Schreibzugriffe aufs Postfach: nur Entwürfe anlegen und (auf Klick) verschieben. Kein Senden, kein Löschen im Code.
@@ -1142,7 +1160,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'acf478ea74';
+  const BUILD = '835e822b96';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1370,7 +1388,39 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
+    addNewMailChips();
   }
+  // ---- Neue Mail (Chris 20.10.): Entwurf an beliebige Empfänger, aus Mails-Reiter, Lage-Punkt, „Wartet auf“ und Task ----
+  function addNewMailChips() {
+    if (!S.createNewDraft) return;
+    document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector(':scope > [data-newmail]') || li.querySelector('.tchips [data-newmail]')) return;
+      const subj = (li.firstChild && li.firstChild.textContent ? li.textContent : '').split('\n')[0].replace(/\s*aus dem Board\s*$/, '').trim().split(/(?<=\.)\s/)[0].replace(/[.:]$/, '').slice(0, 90);
+      const html = '<a class="chip" data-newmail="1" data-subj="' + esc(subj) + '" title="Neue Mail zu diesem Punkt (Entwurf)">✉ Neue Mail</a>';
+      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
+  }
+  let nmAddrLoaded = false;
+  async function loadAddr() {
+    if (nmAddrLoaded) return; nmAddrLoaded = true; const cnt = {}, nm = {};
+    const add = (a, n, w) => { if (!a) return; a = a.toLowerCase(); if (/noreply|no-reply|donotreply|notification|mailer-daemon/.test(a)) return; cnt[a] = (cnt[a] || 0) + w; if (n && !nm[a]) nm[a] = n; };
+    (st.mails || []).forEach(m => { const e = m.from && m.from.emailAddress; if (e) add(e.address, e.name, 1); });
+    const sent = await S.apiAll('/me/mailFolders/sentitems/messages?$top=100&$orderby=sentDateTime desc&$select=toRecipients,ccRecipients', null, 300).catch(() => []);
+    sent.forEach(m => (m.toRecipients || []).concat(m.ccRecipients || []).forEach(r => r.emailAddress && add(r.emailAddress.address, r.emailAddress.name, 3)));
+    $('nmAddr').innerHTML = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 400).map(a => '<option value="' + esc(a) + '">' + esc(nm[a] || a) + '</option>').join('');
+  }
+  function newMailDialog(subj, ctx) {
+    $('nmTo').value = ''; $('nmSubj').value = subj || ''; $('nmText').value = ''; $('nmCtx').textContent = ctx || '';
+    $('dlgNewMail').showModal(); $('nmTo').focus(); loadAddr();
+  }
+  $('nmCancel').onclick = () => $('dlgNewMail').close();
+  $('fNewMail').onsubmit = async e => {
+    e.preventDefault(); const to = $('nmTo').value, subj = $('nmSubj').value, text = $('nmText').value;
+    const win = window.open('', 'outlook');   // sofort öffnen (Popup-Blocker), Ziel nach dem Anlegen setzen
+    try { const d = await S.createNewDraft(to, subj, text); $('dlgNewMail').close();
+      if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook'); toast('Entwurf angelegt, in Outlook geöffnet');
+    } catch (err) { if (win) win.close(); setStatus(err.message, 'err'); }
+  };
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-newmail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); newMailDialog(b.dataset.subj || '', b.dataset.subj ? 'Zu: ' + b.dataset.subj : ''); }, true);
+  if (S.createNewDraft && $('eMail')) { $('eMail').style.display = ''; $('eMail').onclick = () => newMailDialog($('eTitle').value.slice(0, 120), 'Zum Task: ' + $('eTitle').value.slice(0, 90)); }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
   const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche'.split(' '));
   const toks = t => new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(w => w.length >= 5 && !STOP.has(w)));
@@ -1552,7 +1602,7 @@ if (S.cockpit) {
     const td = st.triageDate ? 'Buddy hat eingeordnet am ' + new Date(st.triageDate).toLocaleString('de-CH', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : 'Buddy hat noch nicht eingeordnet, „Neu“ = letzte 24 Stunden';
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
-    $('mlist').innerHTML = '<div class="mfilter">' + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
+    $('mlist').innerHTML = '<div class="mfilter">' + (S.createNewDraft ? '<button data-newmail="1" data-subj="">✉ Neue Mail</button> ' : '') + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
