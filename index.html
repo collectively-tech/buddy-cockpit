@@ -1146,6 +1146,8 @@ if (S.cockpit) {
     const open = jobsOpen(), done = q.items.filter(x => st.dec['jobs:' + x.id]), mb = q.mailbox || '';
     const nRep = open.filter(x => x.kind === 'reply').length, nRead = open.filter(x => x.kind === 'read').length;
     const bkey = 'jobsBatch:' + mb + ':' + (q.title || '');
+    if (!st.dec[bkey] && !st.jobsSentChk && done.some(x => x.kind === 'reply' && st.dec['jobs:' + x.id].status === 'done') && S.api) {   // Entwürfe-Ordner leer = alles gesendet, kein Klick nötig (Chris 20.10.)
+      st.jobsSentChk = true; S.api('/users/' + encodeURIComponent(mb) + '/mailFolders/drafts/messages?$top=1&$select=id').then(r => { if (r && Array.isArray(r.value) && !r.value.length) { decide(bkey, 'done', { by: 'cockpit-auto', reason: 'Entwürfe-Ordner leer' }); setTimeout(paintHeute, 300); } }).catch(() => {}); }
     if (!open.length && !done.some(x => st.dec['jobs:' + x.id].status === 'error')) {   // alles angelegt: Hinweis bleibt, bis Chris "gesendet" klickt (Chris 20.10.)
       const nd = done.filter(x => x.kind === 'reply' && st.dec['jobs:' + x.id].status === 'done').length;
       if (!nd || st.dec[bkey]) return '';
@@ -1155,10 +1157,15 @@ if (S.cockpit) {
     const row = x => { const d = st.dec['jobs:' + x.id];
       return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Gelesen:' : 'Entwurf:') + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + (x.note ? ' · ' + esc(x.note) : '') + '</small></span>'
         + (d ? (d.status === 'error' ? '<span class="cs" style="color:var(--err,#c00)">Fehler: ' + esc(d.error || '') + '</span>' : (d.webLink ? '<a class="chip" href="' + esc(d.webLink) + '" target="outlook">Entwurf ↗</a>' : '<span class="cs">erledigt</span>')) : '') + '</div>'; };
-    return '<section class="card sugcard"><div class="ch"><h2>Antworten ' + esc(mb) + '</h2><span class="cs">' + esc(q.title || '') + ' · ' + nRep + ' Entwürfe, ' + nRead + ' nur gelesen · es wird nichts gesendet</span>'
+    // Nur Offenes zeigen, Erledigtes zusammengeklappt (Chris 20.10.: gesendete Entwürfe verwirrten)
+    const sent = !!st.dec[bkey], doneRows = done.map(x => { const d = st.dec['jobs:' + x.id];
+      return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Gelesen:' : (sent ? 'Gesendet:' : 'Entwurf:')) + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + '</small></span>'
+        + (d.status === 'error' ? '<span class="cs" style="color:var(--err,#c00)">Fehler: ' + esc(d.error || '') + '</span>' : (!sent && d.webLink ? '<a class="chip" href="' + esc(d.webLink) + '" target="outlook">Entwurf ↗</a>' : '')) + '</div>'; }).join('');
+    return '<section class="card sugcard"><div class="ch"><h2>Antworten ' + esc(mb) + '</h2><span class="cs">' + nRep + ' Entwürfe, ' + nRead + ' nur gelesen · es wird nichts gesendet</span>'
       + (open.length ? '<button class="primary" id="btnJobsRun"' + (st.jobsRun ? ' disabled' : '') + '>' + (st.jobsRun ? 'Läuft …' : (open.length + ' ausführen')) + '</button>' : '')
-      + ' <a class="btn ghost" href="https://outlook.office.com/mail/' + encodeURIComponent(mb) + '/drafts" target="outlook">Entwürfe in ' + esc(mb) + ' ↗</a></div>'
-      + q.items.map(row).join('') + '</section>';
+      + (sent ? '' : ' <a class="btn ghost" href="https://outlook.office.com/mail/' + encodeURIComponent(mb) + '/drafts" target="outlook">Entwürfe in ' + esc(mb) + ' ↗</a>') + '</div>'
+      + open.map(row).join('')
+      + (done.length ? '<details class="jobsdone"><summary class="cs">' + esc(q.title || 'Frühere') + ': ' + done.length + ' erledigt' + (sent ? ', Antworten gesendet' : '') + '</summary>' + doneRows + '</details>' : '') + '</section>';
   }
   async function runJobs() {
     if (st.jobsRun) return; const q = st.jobs; if (!q) return; const mb = q.mailbox;
@@ -1232,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'c3562a5b49';
+  const BUILD = '5ef149b64b';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
