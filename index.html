@@ -675,6 +675,13 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Download fehlgeschlagen (' + r.status + ')');
       return r.blob();
     },
+    async searchAll(q) {   // Volltextsuche in ALLEN Ordnern (Betreff, Text, Personen), nur lesen (Chris 20.10.)
+      const t = String(q || '').replace(/["\\]/g, ' ').trim(); if (t.length < 3) return [];
+      const r = await g('GET', '/me/messages?$search=' + encodeURIComponent('"' + t + '"') + '&$top=25'
+        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag,conversationId,parentFolderId');
+      if (!r.ok) throw new Error('Suche fehlgeschlagen (' + r.status + ')');
+      return ((await r.json()).value || []);
+    },
     async searchAttachments(q) {   // Mails in ALLEN Ordnern, deren Anhang-Name den Begriff enthält (nur lesen)
       const t = String(q || '').replace(/["\\]/g, ' ').trim(); if (t.length < 2) return [];
       const r = await g('GET', '/me/messages?$search=' + encodeURIComponent('"attachment:' + t + '"') + '&$top=25'
@@ -1038,6 +1045,7 @@ if (S.cockpit) {
     decisions: 'AI-CoS/knowledge/cockpit/decisions.json',
     refresh: 'AI-CoS/knowledge/cockpit/refresh-request.json',
     portfolio: 'AI-CoS/knowledge/cockpit/portfolio.json',
+    aliases: 'AI-CoS/knowledge/cockpit/aliases.json',   // Rufnamen → Namen in Mails, z.B. namfon → chaiyakham (pflegt Buddy, Chris 20.10.)
     jobs: 'AI-CoS/knowledge/cockpit/jobs-queue.json'   // Antworten fuer geteilte Postfaecher (jobs@), schreibt Buddy, Chris loest per Klick aus (20.10.)
   };
   const TABS = [['heute', 'Heute'], ['mails', 'Mails'], ['tasks', 'Tasks'], ['portfolio', 'Portfolio'], ['links', 'Links']];
@@ -1224,7 +1232,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '32d16e00e9';
+  const BUILD = 'c3562a5b49';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1470,7 +1478,9 @@ if (S.cockpit) {
     (st.mails || []).forEach(m => { const e = m.from && m.from.emailAddress; if (e) add(e.address, e.name, 1); });
     const sent = await S.apiAll('/me/mailFolders/sentitems/messages?$top=100&$orderby=sentDateTime desc&$select=toRecipients,ccRecipients', null, 300).catch(() => []);
     sent.forEach(m => (m.toRecipients || []).concat(m.ccRecipients || []).forEach(r => r.emailAddress && add(r.emailAddress.address, r.emailAddress.name, 3)));
-    $('nmAddr').innerHTML = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 400).map(a => '<option value="' + esc(a) + '">' + esc(nm[a] || a) + '</option>').join('');
+    if (!st.aliases) { const f = await S.readPath(P.aliases).catch(() => null); try { st.aliases = JSON.parse((f && f.text) || '{}'); } catch (e) { st.aliases = {}; } }
+    const al = a => Object.keys(st.aliases || {}).filter(k => [].concat(st.aliases[k]).some(v => (a + ' ' + (nm[a] || '')).toLowerCase().includes(String(v).toLowerCase())));   // Rufname mit in die Vorschlagszeile (z.B. Namfon)
+    $('nmAddr').innerHTML = Object.keys(cnt).sort((a, b) => cnt[b] - cnt[a]).slice(0, 400).map(a => { const x = al(a); return '<option value="' + esc(a) + '">' + esc((nm[a] || a) + (x.length ? ' (' + x.map(k => k.charAt(0).toUpperCase() + k.slice(1)).join(', ') + ')' : '')) + '</option>'; }).join('');
   }
   function newMailDialog(subj, ctx) {
     $('nmTo').value = ''; $('nmSubj').value = subj || ''; $('nmText').value = ''; $('nmCtx').textContent = ctx || '';
@@ -1643,7 +1653,9 @@ if (S.cockpit) {
     }
     if (st.unreadOnly === undefined) st.unreadOnly = !!lsGet('cockpit-unread');
     const q = st.mq.trim().toLowerCase();
-    let list = q ? st.mails.filter(m => ((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase().includes(q)) : st.mails;
+    if (!st.aliases && !st.aliasTry) { st.aliasTry = true; S.readPath(P.aliases).then(f => { try { st.aliases = JSON.parse((f && f.text) || '{}'); } catch (e) { st.aliases = {}; } if (st.mq) paintMails(); }).catch(() => { st.aliases = {}; }); }
+    const qAlt = q ? [q].concat([].concat((st.aliases || {})[q] || [])).map(x => String(x).toLowerCase()) : [];   // Rufname zählt wie der Name im Mail
+    let list = q ? st.mails.filter(m => { const h = ((m.subject || '') + ' ' + fromOf(m) + ' ' + addrOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase(); return qAlt.some(x => h.includes(x)); }) : st.mails;
     if (st.attOnly === undefined) st.attOnly = !!lsGet('cockpit-att');
     if (!st.learn && S.moveMessage && (!st.learnTry || Date.now() - st.learnTry > 30e3)) setTimeout(loadLearn, 0);
     const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length;
@@ -1654,6 +1666,11 @@ if (S.cockpit) {
     const inIds = new Set(list.map(m => m.id));
     const safeIds = list.filter(m => { const p = proposal(m); return p && p.safe; }).map(m => m.id); st.nxVisible = safeIds; const nSafe = safeIds.length;   // nur was gerade angezeigt wird
     const hits = srv && st.attHits && st.attHits.q === q ? st.attHits : null;
+    const fts = !st.attOnly && q.length >= 3 && S.searchAll;   // Volltext in allen Ordnern (Chris 20.10.: „namfon“ fand nichts)
+    if (fts && (!st.ftHits || st.ftHits.q !== q)) { st.ftHits = { q, list: null }; clearTimeout(st.ftT); st.ftT = setTimeout(async () => { try { const terms = qAlt.slice(0, 3); const rs = await Promise.all(terms.map(t => S.searchAll(t))); const seen = {}, r = [].concat(...rs).filter(m => !seen[m.id] && (seen[m.id] = 1)).sort((a, b) => (b.receivedDateTime || '').localeCompare(a.receivedDateTime || '')); if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = r; paintMails(); } } catch (e) { if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = []; st.ftHits.err = e.message; paintMails(); } } }, 600); }
+    const fh = fts && st.ftHits && st.ftHits.q === q ? st.ftHits : null;
+    const ftHtml = !fts ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Weitere Treffer zu „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (fh && fh.list ? fh.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Text, Gesendet und abgelegte</span></summary>'
+      + (!fh || !fh.list ? '<div class="empty">Suche läuft …</div>' : fh.err ? '<div class="errbox">' + esc(fh.err) + '</div>' : fh.list.filter(m => !inIds.has(m.id)).slice(0, 25).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
@@ -1669,7 +1686,7 @@ if (S.cockpit) {
     const isOpen = (k, d) => (k in open ? open[k] : d);
     $('mlist').innerHTML = '<div class="mfilter">' + (S.createNewDraft ? '<button data-newmail="1" data-subj="">✉ Neue Mail</button> ' : '') + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
-      + hitsHtml
+      + hitsHtml + ftHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
