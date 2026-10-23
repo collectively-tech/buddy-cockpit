@@ -1239,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'e498f5a118';
+  const BUILD = 'f05f5c1e2e';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1430,8 +1430,9 @@ if (S.cockpit) {
     }
     $('v-heute').innerHTML = jobsCard() + v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
-      let linked = Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
-      if (!linked.length) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
+      const struck = /^\s*(gestrichen|erledigt|entf(ä|ae)llt|hinfällig)\b/i.test(li.textContent); if (struck) li.dataset.struck = '1';   // gestrichener Punkt: keine Mails, kein Thema (Chris 23.10.)
+      let linked = struck ? [] : Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
+      if (!linked.length && !struck) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
       { const all = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1));
         li.dataset.prompt = pointPrompt(li.textContent.trim(), all); }
       li.dataset.mids = linked.map(x => x.id).join('\n'); li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
@@ -1459,7 +1460,7 @@ if (S.cockpit) {
       if (miss.length && wl) { let n = wl.querySelectorAll('li').length;
         miss.forEach(t => { n++; const note = field(t.line, 'note'); wl.insertAdjacentHTML('beforeend', '<li value="' + n + '" class="wa" data-wa="' + n + '"><b>' + esc(t.line.title.split(':')[0]) + '.</b> ' + esc((t.line.title.split(':').slice(1).join(':') || '').trim()) + (field(t.line, 'due') ? ' Wiedervorlage ' + esc(fmtDue(field(t.line, 'due'))) + '.' : '') + ' <span class="cs">aus dem Board</span></li>'); }); } }
     document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { const th = topicOf(li.textContent); if (th && !li.querySelector('.tchips')) li.insertAdjacentHTML('beforeend', topicChips(th, li.textContent.trim(), false)); });   // „Wartet auf“: Thema + Chats (Chris 10.10.)
-    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts')));
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (li.dataset.struck) return; const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts')));
       // Punkt als Ganzes mit Buddy: neuer Chat mit Punkt + allen Mails, oder bestehender Chat (Text in die Zwischenablage, dort einfügen)
       const tc = li.querySelector('.tchips'), pr = li.dataset.prompt;
       if (tc && pr) {
@@ -1504,13 +1505,13 @@ if (S.cockpit) {
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-newmail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); newMailDialog(b.dataset.subj || '', b.dataset.subj ? 'Zu: ' + b.dataset.subj : ''); }, true);
   if (S.createNewDraft && $('eMail')) { $('eMail').style.display = ''; $('eMail').onclick = () => newMailDialog($('eTitle').value.slice(0, 120), 'Zum Task: ' + $('eTitle').value.slice(0, 90)); }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
-  const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche'.split(' '));
+  const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche chris roger notig noetig board schritt kommt deine deinen deiner deinem wartet warten antwort braucht offen gestrichen korrektur erledigt'.split(' '));   // Allerweltswörter verknüpfen sonst Falsches (Chris 23.10.: Echa-Punkt mit Canan-Mails)
   const toks = t => new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(w => w.length >= 5 && !STOP.has(w)));
   function guessLinks(text) {
     const lt = toks(text); if (!lt.size) return [];
     const cand = st.mails.filter(m => !mailDone(m)).map(m => { const tr = st.triage[m.internetMessageId] || {}; if (!tr.id || /^erledigt/i.test(tr.why || '')) return null;
-      const mt = toks((tr.why || '') + ' ' + (m.subject || '') + ' ' + fromOf(m)); let sc = 0; lt.forEach(w => { if (mt.has(w)) sc++; });
-      if (tr.cat === 'needs') sc += 1; return sc >= 3 ? { tr, sc, t: m.receivedDateTime } : null; }).filter(Boolean);
+      const mt = toks((tr.why || '') + ' ' + (m.subject || '') + ' ' + fromOf(m)); let sc = 0; lt.forEach(w => { if (mt.has(w)) sc++; }); const shared = sc;
+      if (tr.cat === 'needs') sc += 1; return sc >= 3 && shared >= 2 ? { tr, sc, t: m.receivedDateTime } : null; }).filter(Boolean);
     cand.sort((a, b) => b.sc - a.sc || (a.t < b.t ? 1 : -1));
     return cand.length ? cand.filter(c => c.sc >= cand[0].sc - 1).slice(0, 2).map(c => c.tr) : [];
   }
