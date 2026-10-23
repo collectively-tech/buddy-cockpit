@@ -1239,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '5ef149b64b';
+  const BUILD = 'e498f5a118';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1249,7 +1249,7 @@ if (S.cockpit) {
     } catch (e) { /* offline oder gesperrt: alte Version weiter nutzen */ }
   }
   async function loadAll() {
-    if (st.loading) return; st.loading = true; st.err = {};
+    if (st.loading) return; st.loading = true; st.err = {}; st.ftHits = null; st.attHits = null;   // Suchtreffer frisch laden (Lesestatus kann sich in Outlook geändert haben)
     checkVersion();
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks, jobs: loadJobs };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
@@ -1584,7 +1584,7 @@ if (S.cockpit) {
     return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + nxFolderSel(m, p) + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
       + '<button class="primary" data-nxok="' + esc(m.id) + '">Übernehmen</button><button data-nxno="' + esc(m.id) + '" title="Nicht passend, Buddy lernt daraus">Nein</button></div>'; };
   document.addEventListener('change', e => { const sel = e.target.closest && e.target.closest('select[data-nxf]'); if (!sel) return;   // Beschriftung folgt der Wahl
-    const b = sel.closest('.nx').querySelector('.nxt b'); const m = st.mails.find(x => x.id === sel.dataset.nxf); const p = m && proposal(m); if (!b || !p) return;
+    const b = sel.closest('.nx').querySelector('.nxt b'); const m = anyMail(sel.dataset.nxf); const p = m && proposal(m); if (!b || !p) return;
     const parts = p.keys.filter(k => k !== 'file').map(k => NX_LBL[k]); if (sel.value && !parts.includes(NX_LBL.read) && !m.isRead) parts.unshift(NX_LBL.read); if (sel.value) parts.push('Ablegen'); else if (!parts.length) parts.push('Nur Vorschlag schliessen');
     b.textContent = parts.join(' + ') + (sel.value ? '' : ' (bleibt im Posteingang)'); });
   function chosenFolder(m, p) {   // Auswahl im Vorschlag hat Vorrang vor dem Vorschlag
@@ -1621,13 +1621,17 @@ if (S.cockpit) {
     try { st.att[mid] = { list: await S.listAttachments(mid) }; } catch (e) { st.att[mid] = { err: e.message, list: [] }; }
     document.querySelectorAll('details.matt').forEach(dd => { if (dd.dataset.matt === mid) { dd.querySelector('.mattl').innerHTML = attList(mid); dd.querySelector('summary').textContent = attSum(mid); } });
   }
+  // Mails auch ausserhalb des Posteingangs bedienen (Suchtreffer in allen Ordnern), Chris 23.10.
+  function anyMail(id) { return st.mails.find(x => x.id === id) || ((st.ftHits && st.ftHits.list) || []).find(x => x.id === id) || ((st.attHits && st.attHits.list) || []).find(x => x.id === id); }
+  const SYS_LBL = { inbox: 'Posteingang', sentitems: 'Gesendet', drafts: 'Entwürfe', archive: 'Archiv', deleteditems: 'Gelöscht', junkemail: 'Junk' };
+  function folderLabel(id) { if (!id) return ''; const sy = st.sysFolders && st.sysFolders[id]; if (sy) return SYS_LBL[sy] || sy; const f = (st.folders || []).find(x => x.id === id); return f ? f.name : ''; }
   function mailRow(m) {
     const tr = triageOf(m);
     const when = new Date(m.receivedDateTime);
     const w = when.toDateString() === new Date().toDateString() ? 'heute ' + when.toTimeString().slice(0, 5) : whenOf(m.receivedDateTime);
     const linked = tasksForMail(m);
     return '<div class="mail' + (m.isRead ? '' : ' unread') + '" data-mid="' + esc(m.id) + '">'
-      + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + w + '</span></div>'
+      + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + (m.parentFolderId && !st.mails.includes(m) && folderLabel(m.parentFolderId) ? '📁 ' + esc(folderLabel(m.parentFolderId)) + ' · ' : '') + w + '</span></div>'
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments && !S.listAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + attBlock(m)
@@ -1674,10 +1678,11 @@ if (S.cockpit) {
     const safeIds = list.filter(m => { const p = proposal(m); return p && p.safe; }).map(m => m.id); st.nxVisible = safeIds; const nSafe = safeIds.length;   // nur was gerade angezeigt wird
     const hits = srv && st.attHits && st.attHits.q === q ? st.attHits : null;
     const fts = !st.attOnly && q.length >= 3 && S.searchAll;   // Volltext in allen Ordnern (Chris 20.10.: „namfon“ fand nichts)
-    if (fts && (!st.ftHits || st.ftHits.q !== q)) { st.ftHits = { q, list: null }; clearTimeout(st.ftT); st.ftT = setTimeout(async () => { try { const terms = qAlt.slice(0, 3); const rs = await Promise.all(terms.map(t => S.searchAll(t))); const seen = {}, r = [].concat(...rs).filter(m => !seen[m.id] && (seen[m.id] = 1)).sort((a, b) => (b.receivedDateTime || '').localeCompare(a.receivedDateTime || '')); if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = r; paintMails(); } } catch (e) { if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = []; st.ftHits.err = e.message; paintMails(); } } }, 600); }
+    if (fts && (!st.ftHits || st.ftHits.q !== q)) { st.ftHits = { q, list: null }; clearTimeout(st.ftT); st.ftT = setTimeout(async () => { try { const terms = qAlt.slice(0, 3); const rs = await Promise.all(terms.map(t => S.searchAll(t))); const seen = {}, r = [].concat(...rs).filter(m => !seen[m.id] && (seen[m.id] = 1)).sort((a, b) => (b.receivedDateTime || '').localeCompare(a.receivedDateTime || '')); await loadFolders().catch(() => {}); if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = r; paintMails(); } } catch (e) { if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = []; st.ftHits.err = e.message; paintMails(); } } }, 600); }
     const fh = fts && st.ftHits && st.ftHits.q === q ? st.ftHits : null;
-    const ftHtml = !fts ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Weitere Treffer zu „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (fh && fh.list ? fh.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Text, Gesendet und abgelegte</span></summary>'
-      + (!fh || !fh.list ? '<div class="empty">Suche läuft …</div>' : fh.err ? '<div class="errbox">' + esc(fh.err) + '</div>' : fh.list.filter(m => !inIds.has(m.id)).slice(0, 25).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
+    const ftList = fh && fh.list ? fh.list.filter(m => !inIds.has(m.id) && st.mails.every(x => x.id !== m.id) && (!st.unreadOnly || !m.isRead)) : [];   // Filter „Nur ungelesene“ gilt auch hier, Inbox-Mails nie doppelt (Chris 23.10.)
+    const ftHtml = !fts ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Weitere Treffer zu „' + esc(st.mq.trim()) + '“' + (st.unreadOnly ? ', nur ungelesene' : '') + '</span><span class="cnt2">' + (fh && fh.list ? ftList.length : '…') + '</span><span class="cs">andere Ordner: abgelegt, Gesendet, Archiv</span></summary>'
+      + (!fh || !fh.list ? '<div class="empty">Suche läuft …</div>' : fh.err ? '<div class="errbox">' + esc(fh.err) + '</div>' : ftList.slice(0, 25).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
@@ -1900,7 +1905,7 @@ if (S.cockpit) {
       + '<button data-fkeep="1">In Inbox lassen</button>';
   }
   async function doMove(mid, fid, quiet) {
-    const m = st.mails.find(x => x.id === mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
+    const m = anyMail(mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
     const b = fileBar(); b.querySelectorAll('button,select').forEach(x => { x.disabled = true; });
     try { const r = await S.moveMessage(m.id, f.id);
       st.mails = st.mails.filter(x => x !== m); if (st.inbox && st.inbox.totalItemCount) st.inbox.totalItemCount--;
@@ -1922,10 +1927,10 @@ if (S.cockpit) {
   });
   document.addEventListener('click', async e => {
     const mr = e.target.closest('[data-mread]'), mm = e.target.closest('[data-mmove]');
-    if (mm) { const m = st.mails.find(x => x.id === mm.dataset.mmove); if (m) offerFile(m); return; }
-    if (!mr) return; const m = st.mails.find(x => x.id === mr.dataset.mread); if (!m) return;
+    if (mm) { const m = anyMail(mm.dataset.mmove); if (m) offerFile(m); return; }
+    if (!mr) return; const m = anyMail(mr.dataset.mread); if (!m) return;
     const v = mr.dataset.v === '1'; mr.disabled = true;
-    try { await S.setRead(m.id, v); m.isRead = v; if (st.inbox && typeof st.inbox.unreadItemCount === 'number') st.inbox.unreadItemCount += v ? -1 : 1; kpis(); paintMails(); toast(v ? 'Als gelesen markiert.' : 'Als ungelesen markiert.'); }
+    try { await S.setRead(m.id, v); m.isRead = v; if (st.mails.includes(m) && st.inbox && typeof st.inbox.unreadItemCount === 'number') st.inbox.unreadItemCount += v ? -1 : 1; kpis(); paintMails(); toast(v ? 'Als gelesen markiert.' : 'Als ungelesen markiert.'); }
     catch (err) { mr.disabled = false; setStatus(err.message, 'err'); }
   });
   document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
@@ -1937,11 +1942,11 @@ if (S.cockpit) {
   }
   document.addEventListener('click', async e => {
     const mdn = e.target.closest('[data-mdone],[data-mundo]');
-    if (mdn) { const m = st.mails.find(x => x.id === (mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
+    if (mdn) { const m = anyMail((mdn.dataset.mdone || mdn.dataset.mundo)); if (!m) return;
       await decide('mail:' + m.internetMessageId, mdn.dataset.mdone ? 'done' : 'reopened', { subject: m.subject || '' });
       kpis(); paintMails(); paintHeute(); toast(mdn.dataset.mdone ? 'Erledigt. Steht unter „Von dir erledigt“.' : 'Wieder offen.'); if (mdn.dataset.mdone) offerFile(m); return; }
     const mr = e.target.closest('[data-mrep]');
-    if (mr) { const m = st.mails.find(x => x.id === mr.dataset.mrep); if (!m) return; const all = mr.dataset.all === '1'; const key = (all ? 'replyall:' : 'reply:') + m.internetMessageId;
+    if (mr) { const m = anyMail(mr.dataset.mrep); if (!m) return; const all = mr.dataset.all === '1'; const key = (all ? 'replyall:' : 'reply:') + m.internetMessageId;
       const prev = st.dec[key] && st.dec[key].link; if (prev) { window.open(prev, 'outlook'); return; }
       const win = window.open('', 'outlook');   // sofort öffnen (Popup-Blocker), Ziel nach dem Anlegen setzen
       mr.disabled = true; const lbl = mr.textContent; mr.textContent = 'Lege Entwurf an …';
@@ -1951,7 +1956,7 @@ if (S.cockpit) {
       } catch (err) { if (win) win.close(); setStatus(err.message, 'err'); }
       mr.disabled = false; mr.textContent = lbl; return; }
     const mf = e.target.closest('[data-mfwd]');
-    if (mf) { const m = st.mails.find(x => x.id === mf.dataset.mfwd); if (!m) return; const tr = triageOf(m); if (!tr.forwardTo) return;
+    if (mf) { const m = anyMail(mf.dataset.mfwd); if (!m) return; const tr = triageOf(m); if (!tr.forwardTo) return;
       mf.disabled = true; mf.textContent = 'Lege Weiterleitung an …';
       try { const d = await S.createForwardDraft(m.id, tr.forwardTo, tr.forwardText || '');
         await decide('fwd:' + m.internetMessageId, 'created', { link: d.webLink, to: tr.forwardTo });
@@ -1959,7 +1964,7 @@ if (S.cockpit) {
       } catch (err) { mf.disabled = false; mf.textContent = 'Weiterleitung als Entwurf anlegen'; setStatus(err.message, 'err'); }
       return; }
     const md = e.target.closest('[data-mdraft]'); if (!md) return;
-    const m = st.mails.find(x => x.id === md.dataset.mdraft); if (!m) return;
+    const m = anyMail(md.dataset.mdraft); if (!m) return;
     const tr = triageOf(m); if (!tr.draftText) return;
     md.disabled = true; md.textContent = 'Lege Entwurf an …';
     try {
@@ -2033,7 +2038,7 @@ if (S.cockpit) {
   $('aSearch').addEventListener('input', filterAttach);
   $('aSearch').addEventListener('keydown', e => { if (e.key === 'ArrowDown') { e.preventDefault(); $('aList').focus(); } });
   $('fAttach').onsubmit = e => {
-    e.preventDefault(); const m = st.mails.find(x => x.id === $('dlgAttach').dataset.mid); const id = $('aList').value; $('dlgAttach').close();
+    e.preventDefault(); const m = anyMail($('dlgAttach').dataset.mid); const id = $('aList').value; $('dlgAttach').close();
     if (!m || !id) return; const t = model.lines[+id.slice(1)]; const links = linksOf(t);
     if (links.includes(m.webLink)) { setStatus('Mail hängt schon an diesem Task', 'ok'); return; }
     commit({ type: 'edit', key: keys.get(id), link: links.concat(m.webLink).join(' | ') }).then(ok => { if (ok) { toast('Mail an Task gehängt'); paintMails(); } });
@@ -2075,7 +2080,7 @@ if (S.cockpit) {
       const ids = new Set(st.nxVisible || []); const list = st.mails.filter(m => ids.has(m.id)).map(m => ({ m, p: proposal(m) })).filter(x => x.p && x.p.safe); let n = 0;
       for (const x of list) { if (await runProposal(x.m, x.p, true)) n++; all.textContent = 'Übernehme … ' + n + '/' + list.length; }
       kpis(); paintMails(); paintHeute(); toast(n + ' Vorschläge übernommen (gelesen/abgelegt/erledigt). In Outlook jederzeit zurückholbar.'); return; }
-    const m = st.mails.find(x => x.id === (ok ? ok.dataset.nxok : no.dataset.nxno)); if (!m) return;
+    const m = anyMail((ok ? ok.dataset.nxok : no.dataset.nxno)); if (!m) return;
     if (no) { await decide('next:' + m.internetMessageId, 'rejected', { from: fromAddr(m), subject: (m.subject || '').slice(0, 80) }); paintMails(); toast('Ok, Buddy merkt sich das.'); return; }
     const p = proposal(m); if (!p) return; ok.disabled = true; ok.textContent = 'Wird erledigt …';
     if (await runProposal(m, p)) { kpis(); paintMails(); if (!p.a.file) toast('Erledigt: ' + p.label); } else { ok.disabled = false; ok.textContent = 'Übernehmen'; }
@@ -2099,10 +2104,10 @@ if (S.cockpit) {
   document.addEventListener('click', e => {
     const more = e.target.closest('[data-more]'); if (more) { const k = more.dataset.more; st.shown[k] = (st.shown[k] || PAGE) + PAGE; paintMails(); return; }
     const mt = e.target.closest('[data-mtask]');
-    if (mt) { const m = st.mails.find(x => x.id === mt.dataset.mtask); if (!m) return;
+    if (mt) { const m = anyMail(mt.dataset.mtask); if (!m) return;
       openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
       return; }
-    const ma = e.target.closest('[data-mattach]'); if (ma) { const m = st.mails.find(x => x.id === ma.dataset.mattach); if (m) attachDialog(m); return; }
+    const ma = e.target.closest('[data-mattach]'); if (ma) { const m = anyMail(ma.dataset.mattach); if (m) attachDialog(m); return; }
     const bi = e.target.closest('[data-bi]'); if (bi && !e.target.closest('a, button, details, .lacts')) { jumpToBrief(bi.dataset.bi); return; }
     const po = e.target.closest('[data-open]'); if (po && !e.target.closest('#grid')) { openTask(po.dataset.open); }
   });
