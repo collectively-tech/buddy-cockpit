@@ -53,7 +53,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
-.donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
+.okchip{ color:var(--ok) !important; } .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
 .sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; } .prow.sug.busy{ opacity:.55; } .lacts{ display:flex; flex-direction:column; gap:6px; margin:6px 0 2px; } .lact{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12.5px; } .lact .laf{ color:var(--ink3); font-weight:600; } .lact .btn, .lact button{ font-size:12px; padding:4px 10px; } .lact details.drf{ flex-basis:100%; } .prow.sug button:disabled{ cursor:wait; }
 .focusbar{ display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap; padding:10px 14px; margin-bottom:10px; border-radius:12px; background:var(--acc2); color:var(--ink); font-size:13px; }
@@ -1239,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'f05f5c1e2e';
+  const BUILD = 'e997e7d10c';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1472,13 +1472,29 @@ if (S.cockpit) {
     addNewMailChips();
   }
   // ---- Neue Mail (Chris 20.10.): Entwurf an beliebige Empfänger, aus Mails-Reiter, Lage-Punkt, „Wartet auf“ und Task ----
+  function ownText(li) {   // nur der Text des Punkts, ohne Chips, Mails, „erledigt“-Marke
+    let t = ''; for (const n of li.childNodes) { if (n.nodeType === 1 && n.matches('.donechip')) continue; if (n.nodeType === 1 && n.matches('.lacts, .tchips, .chip, .cs, div, details')) break; t += n.textContent; } return t.trim();
+  }
   function addNewMailChips() {
     if (!S.createNewDraft) return;
     document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector(':scope > [data-newmail]') || li.querySelector('.tchips [data-newmail]')) return;
-      const subj = (li.firstChild && li.firstChild.textContent ? li.textContent : '').split('\n')[0].replace(/\s*aus dem Board\s*$/, '').trim().split(/(?<=\.)\s/)[0].replace(/[.:]$/, '').slice(0, 90);
+      const subj = ownText(li).replace(/\s*aus dem Board\s*$/, '').split(/(?<=\.)\s/)[0].replace(/[.:]$/, '').slice(0, 90);
       const html = '<a class="chip" data-newmail="1" data-subj="' + esc(subj) + '" title="Neue Mail zu diesem Punkt (Entwurf)">✉ Neue Mail</a>';
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
+    // Lage-Punkt als Ganzes erledigt (Chris 24.10.): Entscheid in decisions.json, Buddy bringt den Punkt nicht wieder
+    const lageAt = Date.parse((st.useGh ? st.triageDate : st.briefTime) || 0) || 0;
+    document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-ptdone],[data-ptundo]')) return;
+      const own = ownText(li);
+      const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || own.split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim().slice(0, 120); if (!title) return;
+      const key = 'lage:' + title.toLowerCase().replace(/\s+/g, ' '); const d = st.dec[key];
+      const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
+      if (done) { li.classList.add('done'); if (!li.querySelector('.donechip')) li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); }
+      const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Punkt erledigt: wird abgehakt, Buddy bringt ihn nicht wieder">Erledigt ✓</a>';
+      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
   }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    if (b.dataset.ptdone) { decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '' }); toast('Punkt erledigt: ' + (b.dataset.ptitle || '').slice(0, 60)); }
+    else decide(b.dataset.ptundo, 'open', { kind: 'lage' }); }, true);
   let nmAddrLoaded = false;
   async function loadAddr() {
     if (nmAddrLoaded) return; nmAddrLoaded = true; const cnt = {}, nm = {};
