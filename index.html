@@ -1239,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'e997e7d10c';
+  const BUILD = '74730cf6fb';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1469,7 +1469,7 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addNewMailChips();
+    addNewMailChips(); addStatusChips();
   }
   // ---- Neue Mail (Chris 20.10.): Entwurf an beliebige Empfänger, aus Mails-Reiter, Lage-Punkt, „Wartet auf“ und Task ----
   function ownText(li) {   // nur der Text des Punkts, ohne Chips, Mails, „erledigt“-Marke
@@ -1489,9 +1489,28 @@ if (S.cockpit) {
       const key = 'lage:' + title.toLowerCase().replace(/\s+/g, ' '); const d = st.dec[key];
       const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
       if (done) { li.classList.add('done'); if (!li.querySelector('.donechip')) li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); }
-      const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Punkt erledigt: wird abgehakt, Buddy bringt ihn nicht wieder">Erledigt ✓</a>';
+      const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Nur den Lage-Punkt abhaken (der Board-Task bleibt): Buddy bringt ihn nicht wieder">Punkt erledigt ✓</a>';
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
   }
+  // „Wartet auf“: passenden Board-Task finden und Status direkt setzen (Chris 29.10.: On-Hold / Wartet / Aktiv)
+  const normT = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  function taskForPoint(title) {
+    if (!model || !title) return null; const nt = normT(title); if (nt.length < 4) return null;
+    const hits = model.lines.map((l, i) => ({ l, i })).filter(x => x.l && x.l.title && x.l.status && x.l.status !== 'done').filter(x => { const tt = normT(x.l.title), k = normT(x.l.title.split(/[:(]/)[0]); return tt.startsWith(nt.slice(0, 24)) || (k.length >= 4 && nt.startsWith(k)); });
+    return hits.length === 1 ? hits[0] : null;
+  }
+  const ST_LBL = { active: 'Aktiv', wait: 'Wartet', hold: 'On-Hold', done: 'Task erledigt' };
+  function addStatusChips() {
+    document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
+      const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
+      const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
+      const html = '<span class="cs">Task: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
+      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
+  }
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-pst]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const st2 = b.dataset.pst; b.textContent = 'Wird gespeichert …';
+    const k = keys.get(b.dataset.pkey); if (!k) { b.textContent = ST_LBL[st2]; return; } const okay = await commit({ type: 'status', key: k, status: st2 });
+    if (okay) { toast('Task ' + ST_LBL[st2] + ': ' + (b.dataset.ptitle || '').slice(0, 60)); paintHeute(); } }, true);
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     if (b.dataset.ptdone) { decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '' }); toast('Punkt erledigt: ' + (b.dataset.ptitle || '').slice(0, 60)); }
     else decide(b.dataset.ptundo, 'open', { kind: 'lage' }); }, true);
