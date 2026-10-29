@@ -1262,7 +1262,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '27af9635cf';
+  const BUILD = 'cd1a56a4c4';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1535,8 +1535,18 @@ if (S.cockpit) {
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
       const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
       const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc(t.l.title.split(/[:(]/)[0].trim().slice(0, 40)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-lkey="' + esc('lage:' + title.toLowerCase().replace(/\s+/g, ' ')) + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
-      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
+      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); li.dataset.tstatus = cur; });
+    // Filter in „Wartet auf“ wie im Reiter Tasks (Chris 29.10.): On-Hold standardmässig aus, Wartet ein
+    const wl = document.querySelector('#v-heute li[data-wa]'); if (!wl) return; const ol = wl.parentElement;
+    const lis = [...ol.querySelectorAll(':scope > li[data-wa]')]; const nH = lis.filter(li => li.dataset.tstatus === 'hold').length, nW = lis.filter(li => li.dataset.tstatus === 'wait').length;
+    lis.forEach(li => { li.style.display = (li.dataset.tstatus === 'hold' && !showHold) || (li.dataset.tstatus === 'wait' && hideWait) ? 'none' : ''; });
+    if (!ol.previousElementSibling || !ol.previousElementSibling.classList.contains('wafilter')) ol.insertAdjacentHTML('beforebegin', '<div class="wafilter mfilter"></div>');
+    ol.previousElementSibling.innerHTML = '<button data-wafilt="hold" class="' + (showHold ? 'primary' : '') + '">' + (showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + nH + ')') + '</button> <button data-wafilt="wait" class="' + (hideWait ? 'primary' : '') + '">' + (hideWait ? 'Wartet zeigen (' + nW + ')' : 'Wartet ausblenden') + '</button>';
   }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-wafilt]'); if (!b) return; e.preventDefault();
+    if (b.dataset.wafilt === 'hold') { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (er) { /* ohne Speicher */ } }
+    else { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (er) { /* ohne Speicher */ } }
+    paintHeute(); if (typeof render === 'function') render(); });
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-pst]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     const st2 = b.dataset.pst; b.textContent = 'Wird gespeichert …';
     const k = keys.get(b.dataset.pkey); if (!k) { b.textContent = ST_LBL[st2]; return; } const okay = await commit({ type: 'status', key: k, status: st2 });
