@@ -183,6 +183,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 <div class="bar" id="bar" style="display:none">
   <input type="search" id="q" placeholder="Suchen (Titel, Notiz, Tags)">
   <button id="btnHold" title="On-Hold-Tasks ein- oder ausblenden">On-Hold zeigen</button>
+  <button id="btnWait" title="Wartende Tasks ein- oder ausblenden">Wartet ausblenden</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -202,6 +203,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     <div><label>Frist</label><input id="eDue" type="date"></div>
     <div><label>Panel</label><select id="ePanel"></select></div>
   </div>
+  <label>Wiederholung</label><input id="eRepeat" placeholder="leer = einmalig · z.B. monatlich 10 (Frist jeden 10.)">
   <label>Position im Panel</label><select id="ePos"><option value="">unverändert</option><option value="top">an den Anfang</option><option value="end">ans Ende</option></select>
   <label>Tags (mit Komma getrennt)</label><input id="eTags" placeholder="#Roger, #Legal">
   <label>Verknüpft: Mails, Claude-Chats, Dateien (ein Link pro Zeile)</label><textarea id="eLinks" placeholder="https://claude.ai/chat/…&#10;https://outlook.office365.com/owa/?ItemID=…"></textarea>
@@ -360,7 +362,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     if (f) f.value = value;
     else {
       // Reihenfolge due, tags, note, done beibehalten
-      const order = ['due', 'tags', 'link', 'note', 'done'];
+      const order = ['due', 'repeat', 'tags', 'link', 'note', 'done'];
       const nf = { key, value };
       let at = t.fields.length;
       for (let i = 0; i < t.fields.length; i++) {
@@ -370,6 +372,13 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     }
   }
   function today() { return new Date().toISOString().slice(0, 10); }
+  // „monatlich 10“ → nächster 10. nach der bisherigen Frist, mindestens nach heute
+  function nextDue(rep, due, now) {
+    const m = String(rep || '').match(/(\d{1,2})/); if (!m) return ''; const day = Math.min(31, Math.max(1, +m[1]));
+    const base = /^\d{4}-\d{2}-\d{2}$/.test(due || '') ? due : now; let y = +base.slice(0, 4), mo = +base.slice(5, 7);
+    const mk = () => { const last = new Date(Date.UTC(y, mo, 0)).getUTCDate(); return y + '-' + String(mo).padStart(2, '0') + '-' + String(Math.min(day, last)).padStart(2, '0'); };
+    let d; do { mo++; if (mo > 12) { mo = 1; y++; } d = mk(); } while (d <= now); return d;
+  }
 
   // Operationen. Rueckgabe: null = ok, sonst Fehlertext (nichts wurde geaendert).
   function applyOp(model, op) {
@@ -380,13 +389,22 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
         const t = L[i]; t.status = op.status; t.dirty = true;
         if (op.status === 'done') setField(t, 'done', op.date || today());
         else setField(t, 'done', '');
+        // Wiederkehrender Task (Chris 29.10.): beim Erledigen sofort die nächste Instanz anlegen
+        const rep = (t.fields.find(x => x.key === 'repeat') || {}).value;
+        if (op.status === 'done' && rep && !op.noRepeat) {
+          const nd = nextDue(rep, (t.fields.find(x => x.key === 'due') || {}).value, op.date || today());
+          if (nd) { const n = { kind: 'task', status: 'active', title: t.title, fields: [], raw: '', dirty: true };
+            setField(n, 'due', nd); setField(n, 'repeat', rep); ['tags', 'link'].forEach(k => { const f = t.fields.find(x => x.key === k); if (f) setField(n, k, f.value); });
+            setField(n, 'note', 'Wiederkehrend (' + rep + '), vorherige Runde erledigt ' + (op.date || today()) + '.');
+            L.splice(i + 1, 0, n); }
+        }
         return null;
       }
       case 'edit': {
         const i = findTask(model, op.key); if (i < 0) return 'Task nicht mehr gefunden (inzwischen geaendert?)';
         const t = L[i];
         if (op.title != null) { const v = clean(op.title); if (!v) return 'Titel darf nicht leer sein'; t.title = v; }
-        ['due', 'tags', 'link', 'note'].forEach(k => { if (op[k] != null) setField(t, k, op[k]); });
+        ['due', 'repeat', 'tags', 'link', 'note'].forEach(k => { if (op[k] != null) setField(t, k, op[k]); });
         if (op.status) t.status = op.status;
         t.dirty = true; return null;
       }
@@ -394,7 +412,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
         const p = findPanel(model, op.panel); if (p < 0) return 'Panel nicht gefunden';
         const title = clean(op.title); if (!title) return 'Titel darf nicht leer sein';
         const t = { kind: 'task', status: op.status || 'active', title, fields: [], raw: '', dirty: true };
-        ['due', 'tags', 'link', 'note'].forEach(k => { if (op[k]) setField(t, k, op[k]); });
+        ['due', 'repeat', 'tags', 'link', 'note'].forEach(k => { if (op[k]) setField(t, k, op[k]); });
         L.splice(lastTaskInsert(model, p), 0, t); return null;
       }
       case 'move': {
@@ -452,7 +470,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     return 'Unbekannte Operation';
   }
 
-  root.TBCore = { parse, serialize, view, applyOp, keyOf, clean };
+  root.TBCore = { parse, serialize, view, applyOp, keyOf, clean, nextDue };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>window.TB_CONFIG = {"clientId": "e0623805-5ed8-4c9c-810f-89142a25bd02", "tenantId": "742d31f0-26eb-4f55-b84e-a6212d234a0e", "path": "AI-CoS/tasks/board.md", "coworkFolder": "/Users/chris/Library/CloudStorage/OneDrive-BHC/AI-CoS"};</script>
@@ -689,11 +707,12 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Suche fehlgeschlagen (' + r.status + ')');
       return ((await r.json()).value || []);
     },
-    async createEvent(subject, startIso, minutes, reminderMin, body) {   // Frist-/Erinnerungstermin im EIGENEN Kalender (Chris 19.10.). Bewusst ohne Teilnehmer: es geht keine Einladung raus.
+    async createEvent(subject, startIso, minutes, reminderMin, body, monthlyDay) {   // monthlyDay: Serie jeden Monat an diesem Tag (Chris 29.10.)   // Frist-/Erinnerungstermin im EIGENEN Kalender (Chris 19.10.). Bewusst ohne Teilnehmer: es geht keine Einladung raus.
       if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(startIso || '')) throw new Error('Ungültige Startzeit');
       const st = new Date(startIso + ':00'), en = new Date(st.getTime() + (minutes || 30) * 60000), f = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0') + 'T' + String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0') + ':00';
       const ev = { subject: String(subject || '').slice(0, 250), start: { dateTime: f(st), timeZone: 'Europe/Zurich' }, end: { dateTime: f(en), timeZone: 'Europe/Zurich' },
         isReminderOn: reminderMin != null, reminderMinutesBeforeStart: reminderMin == null ? 0 : reminderMin, showAs: 'free', importance: 'high', attendees: [], body: { contentType: 'HTML', content: draftHtml(body || '') } };
+      if (monthlyDay) ev.recurrence = { pattern: { type: 'absoluteMonthly', interval: 1, dayOfMonth: +monthlyDay }, range: { type: 'noEnd', startDate: startIso.slice(0, 10) } };
       const r = await g('POST', '/me/events', JSON.stringify(ev), { 'Content-Type': 'application/json', Prefer: 'outlook.timezone="Europe/Zurich"' });
       if (!r.ok) throw new Error('Termin nicht angelegt (' + r.status + ')');
       const d = await r.json(); return { id: d.id, webLink: d.webLink };
@@ -748,6 +767,7 @@ const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
+let hideWait = false; try { hideWait = localStorage.getItem('tb-hide-wait') === '1'; } catch (e) { /* Standard: wartende sichtbar (Chris 29.10.) */ }
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const S = window.TBStore;
@@ -837,12 +857,13 @@ function render() {
   const panels = C.view(model);
   let total = 0, arch = 0, holdN = 0, waitN = 0;
   const html = panels.map((p, pi) => {
-    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold'));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold') && (!hideWait || q || t.line.status !== 'wait'));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
     total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length;
     const rows = vis.map(t => {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
       let b = l.status === 'hold' ? '<span class="hold">On-Hold</span>' : l.status === 'wait' ? '<span class="wait">' + esc(waitLabel(l)) + '</span>' : (due ? '<span class="due">⚠ ' + esc(fmtDue(due)) + '</span>' : '');
+      if (field(l, 'repeat')) b += '<span class="hold" title="Wiederkehrend: ' + esc(field(l, 'repeat')) + '">↻ ' + esc(field(l, 'repeat')) + '</span>';
       tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>'); b += chipsHtml(l);
       const note = field(l, 'note');
       return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="true" data-k="' + id + '">'
@@ -871,11 +892,13 @@ function render() {
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
+  $('btnWait').textContent = hideWait ? 'Wartet zeigen (' + waitN + ')' : 'Wartet ausblenden'; $('btnWait').classList.toggle('on', hideWait);
   $('foot').textContent = total + ' offene Aufgaben' + (waitN ? ', ' + waitN + ' wartet' : '') + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold || q ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
   if (onRender) onRender();
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
+$('btnWait').onclick = () => { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
 // ---------- Klicks ----------
@@ -908,7 +931,7 @@ function openTask(id) {
   $('eTitle').value = l.title; $('eStatus').value = (l.status === 'hold' || l.status === 'wait') ? l.status : 'active';
   $('eDue').value = /^\d{4}-\d{2}-\d{2}$/.test(field(l, 'due')) ? field(l, 'due') : '';
   $('eDue').dataset.orig = field(l, 'due');
-  $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note');
+  $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note'); $('eRepeat').value = field(l, 'repeat');
   $('ePanel').innerHTML = panelOptions(editing.panel);
   $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
   $('eTopic').innerHTML = ''; if (onTaskOpen) onTaskOpen(l);
@@ -920,7 +943,7 @@ function openNewTask(pre) {
   editing = { isNew: true, panel: def };
   $('dTitle').textContent = 'Neuer Task';
   $('eTitle').value = pre.title || ''; $('eStatus').value = 'active'; $('eDue').value = ''; $('eDue').dataset.orig = '';
-  $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || '';
+  $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || ''; $('eRepeat').value = '';
   $('ePanel').innerHTML = panelOptions(def);
   $('eTopic').innerHTML = '';
   $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
@@ -933,14 +956,14 @@ $('fTask').onsubmit = e => {
   const linkIn = $('eLinks').value.split(/\s*\n\s*|\s*\|\s*/).map(x => x.trim()).filter(Boolean).join(' | ');
   if (ed.isNew) {
     const title = $('eTitle').value, panel = $('ePanel').value, top = $('ePos').value === 'top'; $('dlgTask').close();
-    commit({ type: 'add', panel, title, status: $('eStatus').value, due: $('eDue').value, tags: $('eTags').value, note: $('eNote').value, link: linkIn }).then(okay => {
+    commit({ type: 'add', panel, title, status: $('eStatus').value, due: $('eDue').value, repeat: $('eRepeat').value, tags: $('eTags').value, note: $('eNote').value, link: linkIn }).then(okay => {
       if (!okay || !top) return; const p = C.view(model).find(x => x.name === panel); if (!p || p.tasks.length < 2) return;
       const t = p.tasks.slice().reverse().find(x => x.line.title === C.clean(title)); if (t && p.tasks[0].idx !== t.idx) commit({ type: 'move', key: C.keyOf(model, t.idx), beforeKey: C.keyOf(model, p.tasks[0].idx) });
       toast('Task angelegt: ' + C.clean(title).slice(0, 60));
     });
     return;
   } const dueIn = $('eDue').value || (($('eDue').dataset.orig && !/^\d{4}-\d{2}-\d{2}$/.test($('eDue').dataset.orig)) ? $('eDue').dataset.orig : '');
-  const op = { type: 'edit', key: ed.key, title: $('eTitle').value, status: $('eStatus').value, due: dueIn, tags: $('eTags').value, note: $('eNote').value, link: linkIn };
+  const op = { type: 'edit', key: ed.key, title: $('eTitle').value, status: $('eStatus').value, due: dueIn, repeat: $('eRepeat').value, tags: $('eTags').value, note: $('eNote').value, link: linkIn };
   const target = $('ePanel').value; $('dlgTask').close();
   const pos = $('ePos').value;
   commit(op).then(okay => {
@@ -1239,7 +1262,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '776050e86e';
+  const BUILD = '27af9635cf';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1487,6 +1510,7 @@ if (S.cockpit) {
       const own = ownText(li);
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || own.split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim().slice(0, 120); if (!title) return;
       const key = 'lage:' + title.toLowerCase().replace(/\s+/g, ' '); const d = st.dec[key];
+      if (taskForPoint(title) && !(d && d.status === 'done')) return;   // mit Board-Task: „Task erledigt“ statt „Punkt erledigt“ (Chris 29.10.)
       const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
       if (done) { li.classList.add('done'); if (!li.querySelector('.donechip')) li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); }
       const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Nur den Lage-Punkt abhaken (der Board-Task bleibt): Buddy bringt ihn nicht wieder">Punkt erledigt ✓</a>';
@@ -1507,16 +1531,16 @@ if (S.cockpit) {
   }
   const ST_LBL = { active: 'Aktiv', wait: 'Wartet', hold: 'On-Hold', done: 'Task erledigt' };
   function addStatusChips() {
-    document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
+    document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
       const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
-      const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc(t.l.title.split(/[:(]/)[0].trim().slice(0, 40)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
+      const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc(t.l.title.split(/[:(]/)[0].trim().slice(0, 40)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-lkey="' + esc('lage:' + title.toLowerCase().replace(/\s+/g, ' ')) + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
   }
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-pst]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     const st2 = b.dataset.pst; b.textContent = 'Wird gespeichert …';
     const k = keys.get(b.dataset.pkey); if (!k) { b.textContent = ST_LBL[st2]; return; } const okay = await commit({ type: 'status', key: k, status: st2 });
-    if (okay) { toast('Task ' + ST_LBL[st2] + ': ' + (b.dataset.ptitle || '').slice(0, 60)); paintHeute(); } }, true);
+    if (okay) { if (st2 === 'done' && b.dataset.lkey) decide(b.dataset.lkey, 'done', { kind: 'lage', title: b.dataset.ptitle || '', via: 'task' }); toast((st2 === 'done' ? 'Task erledigt (Archiv): ' : 'Task ' + ST_LBL[st2] + ': ') + (b.dataset.ptitle || '').slice(0, 60)); paintHeute(); } }, true);
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     if (b.dataset.ptdone) { decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '' }); toast('Punkt erledigt: ' + (b.dataset.ptitle || '').slice(0, 60)); }
     else decide(b.dataset.ptundo, 'open', { kind: 'lage' }); }, true);
