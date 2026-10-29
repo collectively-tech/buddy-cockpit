@@ -1239,7 +1239,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '74730cf6fb';
+  const BUILD = '776050e86e';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1497,14 +1497,20 @@ if (S.cockpit) {
   function taskForPoint(title) {
     if (!model || !title) return null; const nt = normT(title); if (nt.length < 4) return null;
     const hits = model.lines.map((l, i) => ({ l, i })).filter(x => x.l && x.l.title && x.l.status && x.l.status !== 'done').filter(x => { const tt = normT(x.l.title), k = normT(x.l.title.split(/[:(]/)[0]); return tt.startsWith(nt.slice(0, 24)) || (k.length >= 4 && nt.startsWith(k)); });
-    return hits.length === 1 ? hits[0] : null;
+    if (hits.length === 1) return hits[0]; if (hits.length > 1) return null;
+    // Rückfall: gemeinsame Begriffe aus Titel, Tags und „wartet auf“ (Buddys Kurztitel weicht oft vom Board-Titel ab); eindeutig bester Treffer, mind. 2 Begriffe
+    const GEN = new Set('bhc chris roger und der die das mit von fuer for the and task frist bis seit wartet auf abwarten'.split(' '));
+    const tk = t => new Set(normT(t).split(' ').filter(w => w.length >= 3 && !GEN.has(w)));
+    const pt = tk(title); if (pt.size < 2) return null;
+    const sc = model.lines.map((l, i) => ({ l, i })).filter(x => x.l && x.l.title && x.l.status && x.l.status !== 'done').map(x => { const tt = tk(x.l.title + ' ' + field(x.l, 'tags') + ' ' + field(x.l, 'wait_on')); let n = 0; pt.forEach(w => { if (tt.has(w)) n++; }); return { x, n }; }).sort((a, b) => b.n - a.n);
+    return sc.length && sc[0].n >= 2 && (!sc[1] || sc[1].n < sc[0].n) ? sc[0].x : null;
   }
   const ST_LBL = { active: 'Aktiv', wait: 'Wartet', hold: 'On-Hold', done: 'Task erledigt' };
   function addStatusChips() {
     document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
       const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
-      const html = '<span class="cs">Task: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
+      const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc(t.l.title.split(/[:(]/)[0].trim().slice(0, 40)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
   }
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-pst]'); if (!b) return; e.preventDefault(); e.stopPropagation();
