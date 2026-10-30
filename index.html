@@ -122,6 +122,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .due.over{ color:var(--hot); background:var(--hotbg); }
 .hold{ font-size:10px; font-weight:700; color:var(--ink2); background:var(--holdbg); border-radius:5px; padding:1px 6px; }
 .wait{ font-size:10px; font-weight:700; color:#8a5a00; background:#fdf0d5; border-radius:5px; padding:1px 6px; }
+a.chip, .chip[data-ptdone], .chip[data-ptundo], .chip[data-pst], .chip[data-newmail], [data-wafilt], [data-copy], [data-newchat], [data-unlink]{ cursor:pointer; } a.chip:hover{ filter:brightness(1.15); text-decoration:underline; }
 .chip{ font-size:10.5px; font-weight:700; border-radius:20px; padding:1px 8px; text-decoration:none; background:var(--acc2); color:var(--acc); white-space:nowrap; }
 .chatw{ display:inline-flex; align-items:center; gap:2px; } .chipx{ border:0; background:transparent; color:var(--ink3); cursor:pointer; font-size:12px; padding:2px 5px; border-radius:6px; line-height:1; } .chipx:hover{ background:var(--hotbg); color:var(--hot); }
 .chip.mail{ background:#e0f2fe; color:#0369a1; } .chip.chat{ background:#fdf0e7; color:#c2410c; } .chip.file{ background:#ecfdf3; color:#15803d; }
@@ -1262,7 +1263,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'cd1a56a4c4';
+  const BUILD = 'a743dd213a';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
