@@ -685,6 +685,13 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
       if (!r.ok) throw new Error('Gelesen-Status nicht gesetzt (' + r.status + ')');
       return true;
     },
+    async setPinned(messageId, pinned, receivedIso, mailbox) {   // in Outlook anheften/loesen (Chris 02.11.): PidTagRenewTime 4500-09-01 = angeheftet; Loesen setzt den Empfangszeitpunkt (Graph kann die Eigenschaft nicht loeschen; live geprueft, Outlook zeigt sie danach nicht mehr oben)
+      if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
+      const v = pinned ? '4500-09-01T00:00:00Z' : (receivedIso && /^\d{4}-\d\d-\d\dT/.test(receivedIso) ? receivedIso : new Date().toISOString());
+      const r = await g('PATCH', mbase(mailbox) + '/messages/' + encodeURIComponent(messageId), JSON.stringify({ singleValueExtendedProperties: [{ id: 'SystemTime 0x0F01', value: v }] }), { 'Content-Type': 'application/json' });
+      if (!r.ok) throw new Error('Anheften nicht geändert (' + r.status + ')');
+      return true;
+    },
     async listAttachments(messageId) {   // Anhänge einer Mail auflisten (nur lesen, ohne Inhalt)
       if (!/^[A-Za-z0-9_=+\-\/]+$/.test(messageId)) throw new Error('Ungültige Mail-ID');
       const r = await g('GET', '/me/messages/' + encodeURIComponent(messageId) + '/attachments?$select=id,name,size,contentType,isInline');
@@ -1274,7 +1281,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '9678529075';
+  const BUILD = '64ac1cbd07';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1773,6 +1780,7 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
+      + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : '📌 Anheften') + '</button>' : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
@@ -2064,6 +2072,13 @@ if (S.cockpit) {
     const v = mr.dataset.v === '1'; mr.disabled = true;
     try { await S.setRead(m.id, v); m.isRead = v; if (st.mails.includes(m) && st.inbox && typeof st.inbox.unreadItemCount === 'number') st.inbox.unreadItemCount += v ? -1 : 1; kpis(); paintMails(); toast(v ? 'Als gelesen markiert.' : 'Als ungelesen markiert.'); }
     catch (err) { mr.disabled = false; setStatus(err.message, 'err'); }
+  });
+  document.addEventListener('click', async e => {   // anheften/loesen (Chris 02.11.)
+    const bp = e.target.closest && e.target.closest('[data-mpin]'); if (!bp) return;
+    const m = anyMail(bp.dataset.mpin); if (!m) return;
+    const v = bp.dataset.v === '1'; bp.disabled = true;
+    try { await S.setPinned(m.id, v, m.receivedDateTime); m.pinned = v; paintMails(); toast(v ? 'In Outlook angeheftet.' : 'Nicht mehr angeheftet.'); }
+    catch (err) { bp.disabled = false; setStatus(err.message, 'err'); }
   });
   document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
 
