@@ -1263,7 +1263,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '48e544c019';
+  const BUILD = '5b2ac93b35';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1572,7 +1572,7 @@ if (S.cockpit) {
       await decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '', mails: open.map(m => m.internetMessageId) });
       for (const m of open) await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', via: 'lage' });
       kpis(); paintMails(); toast('Punkt erledigt' + (open.length ? ' (+' + open.length + ' Mail' + (open.length > 1 ? 's' : '') + ')' : '') + ': ' + (b.dataset.ptitle || '').slice(0, 60));
-      if (open.length === 1) offerFile(open[0]); }
+      if (open.length) { fileQ = open.slice(1); fileN = open.length; offerFile(open[0]); } }   // mehrere Mails: Ablage-Frage nacheinander (Chris 02.11.)
     else {   // Wieder offen: auch die Mails, die mit dem Punkt erledigt wurden
       const prev = st.dec[b.dataset.ptundo] || {}; const mids = (prev.mails || []).filter(id => (st.dec['mail:' + id] || {}).via === 'lage' && st.dec['mail:' + id].status === 'done');
       await decide(b.dataset.ptundo, 'open', { kind: 'lage' });
@@ -1990,26 +1990,30 @@ if (S.cockpit) {
     return [...score.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([id]) => byId.get(id));
   }
   function fileBar() { let b = document.getElementById('fileBar'); if (!b) { b = document.createElement('div'); b.id = 'fileBar'; b.className = 'filebar'; document.body.appendChild(b); } return b; }
-  async function offerFile(m) {
+  let fileQ = [], fileN = 0;   // Warteschlange der Ablage-Fragen nach „Punkt erledigt“
+  function nextFile() { const m = fileQ.shift(); if (m) offerFile(m, true); else fileN = 0; }
+  async function offerFile(m, fromQ) {
     if (!S.moveMessage) return;
+    if (!fromQ && !fileQ.length) fileN = 0;
     const b = fileBar(); b.dataset.mid = m.id;
-    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span><span class="fbl">Suche passende Ordner …</span><button data-fkeep="1">In Inbox lassen</button>';
+    const cnt = fileN > 1 ? ' <span class="fbl">(' + (fileN - fileQ.length) + ' von ' + fileN + ')</span>' : '';
+    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span>' + cnt + '<span class="fbl">Suche passende Ordner …</span><button data-fkeep="1">In Inbox lassen</button>';
     b.style.display = 'flex';
     let hints = [], all = [];
     try { [hints, all] = await Promise.all([folderHints(m), loadFolders()]); } catch (e) { hints = []; }
     if (b.dataset.mid !== m.id) return;
-    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span>'
+    b.innerHTML = '<span class="fbt">Ablegen? „' + esc((m.subject || '(ohne Betreff)').slice(0, 50)) + '“</span>' + cnt
       + hints.map(f => '<button class="primary" data-fmove="' + esc(f.id) + '" title="' + esc(f.name) + '">' + esc(f.name.split(' / ').pop()) + '</button>').join('')
       + (hints.length ? '' : '<span class="fbl">Kein Vorschlag aus früheren Mails.</span>')
       + '<button data-fsearch="1">Ordner suchen …</button><select data-fpick="1"><option value="">Anderer Ordner …</option>' + all.map(f => '<option value="' + esc(f.id) + '">' + esc(f.name) + '</option>').join('') + FSEARCH + '</select>'
-      + '<button data-fkeep="1">In Inbox lassen</button>';
+      + '<button data-fkeep="1">In Inbox lassen</button>' + (fileQ.length ? '<button data-fskipall="1">Restliche ' + fileQ.length + ' in Inbox lassen</button>' : '');
   }
   async function doMove(mid, fid, quiet) {
     const m = anyMail(mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
     const b = fileBar(); b.querySelectorAll('button,select').forEach(x => { x.disabled = true; });
     try { const r = await S.moveMessage(m.id, f.id);
       st.mails = st.mails.filter(x => x !== m); if (st.inbox && st.inbox.totalItemCount) st.inbox.totalItemCount--;
-      b.style.display = 'none'; kpis(); paintMails(); paintHeute();
+      b.style.display = 'none'; kpis(); paintMails(); paintHeute(); setTimeout(nextFile, 0);
       decide('file:' + m.internetMessageId, 'moved', { folder: f.name, subject: m.subject || '' });
       if (st.learn) { const a = addrOf(m), k = (map, key) => { if (!key) return; const o = map[key] || (map[key] = {}); o[f.id] = (o[f.id] || 0) + 1; }; k(st.learn.conv, m.conversationId); k(st.learn.snd, a); }
       if (!quiet) toast('Verschoben nach „' + f.name + '“', async () => {
@@ -2023,7 +2027,8 @@ if (S.cockpit) {
   document.addEventListener('click', e => {
     const fm = e.target.closest('[data-fmove]'), fk = e.target.closest('[data-fkeep]');
     if (fm) doMove(fileBar().dataset.mid, fm.dataset.fmove);
-    if (fk) fileBar().style.display = 'none';
+    if (fk) { fileBar().style.display = 'none'; nextFile(); }
+    if (e.target.closest('[data-fskipall]')) { fileQ = []; fileN = 0; fileBar().style.display = 'none'; }
   });
   document.addEventListener('click', async e => {
     const mr = e.target.closest('[data-mread]'), mm = e.target.closest('[data-mmove]');
