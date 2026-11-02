@@ -1282,7 +1282,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '02fcf61150';
+  const BUILD = 'af47abd132';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1558,7 +1558,7 @@ if (S.cockpit) {
       if (taskForPoint(title) && !(d && d.status === 'done')) return;   // mit Board-Task: „Task erledigt“ statt „Punkt erledigt“ (Chris 29.10.)
       const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
       if (done) { li.classList.add('done'); if (!li.querySelector('.donechip')) li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); }
-      const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Nur den Lage-Punkt abhaken (der Board-Task bleibt): Buddy bringt ihn nicht wieder">Punkt erledigt ✓</a>';
+      const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip" data-ptask="1" data-ptitle="' + esc(title) + '" title="Board-Task aus diesem Punkt anlegen, danach Status wie Wartet oder On-Hold setzbar">+ Task</a> <a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Nur den Lage-Punkt abhaken: Buddy bringt ihn nicht wieder">Punkt erledigt ✓</a>';
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); });
   }
   // „Wartet auf“: passenden Board-Task finden und Status direkt setzen (Chris 29.10.: On-Hold / Wartet / Aktiv)
@@ -1566,7 +1566,7 @@ if (S.cockpit) {
   function taskForPoint(title) {
     if (!model || !title) return null; const nt = normT(title); if (nt.length < 4) return null;
     const hits = model.lines.map((l, i) => ({ l, i })).filter(x => x.l && x.l.title && x.l.status && x.l.status !== 'done').filter(x => { const tt = normT(x.l.title), k = normT(x.l.title.split(/[:(]/)[0]); return tt.startsWith(nt.slice(0, 24)) || (k.length >= 4 && nt.startsWith(k)); });
-    if (hits.length === 1) return hits[0]; if (hits.length > 1) return null;
+    if (hits.length === 1) return hits[0];   // mehrere Treffer (z. B. drei „Planted:“-Tasks): unten nach gemeinsamen Begriffen entscheiden (Chris 02.11.)
     // Rückfall: gemeinsame Begriffe aus Titel, Tags und „wartet auf“ (Buddys Kurztitel weicht oft vom Board-Titel ab); eindeutig bester Treffer, mind. 2 Begriffe
     const GEN = new Set('bhc chris roger und der die das mit von fuer for the and task frist bis seit wartet auf abwarten'.split(' '));
     const tk = t => new Set(normT(t).split(' ').filter(w => w.length >= 3 && !GEN.has(w)));
@@ -2256,6 +2256,8 @@ if (S.cockpit) {
     const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {}; o[d.dataset.g] = d.open; lsSet('cockpit-open', JSON.stringify(o)); }, true);
   document.addEventListener('click', e => {
     const more = e.target.closest('[data-more]'); if (more) { const k = more.dataset.more; st.shown[k] = (st.shown[k] || PAGE) + PAGE; paintMails(); return; }
+    const pt = e.target.closest('[data-ptask]');   // Lage-Punkt ohne Board-Task: Task anlegen (Chris 02.11.)
+    if (pt) { e.preventDefault(); const li = pt.closest('li'); openNewTask({ title: pt.dataset.ptitle || 'Lage-Punkt', note: (li ? ownText(li) : '').replace(/^\s*erledigt\s*/, '').slice(0, 400) }); return; }
     const mt = e.target.closest('[data-mtask]');
     if (mt) { const m = anyMail(mt.dataset.mtask); if (!m) return;
       openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
