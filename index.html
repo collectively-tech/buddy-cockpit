@@ -1263,7 +1263,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'a743dd213a';
+  const BUILD = '48e544c019';
   async function checkVersion() {
     try {
       if (!/^https?:/.test(location.protocol)) return;
@@ -1493,8 +1493,20 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addNewMailChips(); addStatusChips();
+    addNewMailChips(); addStatusChips(); hideDonePoints();
   }
+  // Erledigte Punkte sofort ausblenden, ohne Aktualisieren (Chris 02.11.); pro Liste ein Knopf zum Zeigen
+  let showDone = false;
+  function hideDonePoints() {
+    const ols = new Set([...document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]')].map(li => li.parentElement));
+    ols.forEach(ol => { const lis = [...ol.querySelectorAll(':scope > li')].filter(li => li.classList.contains('done')); let tg = ol.nextElementSibling;
+      if (tg && !tg.classList.contains('donetoggle')) tg = null;
+      if (!lis.length) { if (tg) tg.remove(); return; }
+      lis.forEach(li => { if (!showDone) li.style.display = 'none'; else if (li.style.display === 'none' && !(li.dataset.tstatus === 'hold' && !showHold) && !(li.dataset.tstatus === 'wait' && hideWait)) li.style.display = ''; });
+      if (!tg) { ol.insertAdjacentHTML('afterend', '<div class="donetoggle mfilter"></div>'); tg = ol.nextElementSibling; }
+      tg.innerHTML = '<button data-showdone="1">' + (showDone ? 'Erledigte ausblenden' : '✓ ' + lis.length + ' erledigt (zeigen)') + '</button>'; });
+  }
+  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-showdone]'); if (!b) return; e.preventDefault(); showDone = !showDone; paintHeute(); });
   // ---- Neue Mail (Chris 20.10.): Entwurf an beliebige Empfänger, aus Mails-Reiter, Lage-Punkt, „Wartet auf“ und Task ----
   function ownText(li) {   // nur der Text des Punkts, ohne Chips, Mails, „erledigt“-Marke
     let t = ''; for (const n of li.childNodes) { if (n.nodeType === 1 && n.matches('.donechip')) continue; if (n.nodeType === 1 && n.matches('.lacts, .tchips, .chip, .cs, div, details')) break; t += n.textContent; } return t.trim();
@@ -1552,9 +1564,20 @@ if (S.cockpit) {
     const st2 = b.dataset.pst; b.textContent = 'Wird gespeichert …';
     const k = keys.get(b.dataset.pkey); if (!k) { b.textContent = ST_LBL[st2]; return; } const okay = await commit({ type: 'status', key: k, status: st2 });
     if (okay) { if (st2 === 'done' && b.dataset.lkey) decide(b.dataset.lkey, 'done', { kind: 'lage', title: b.dataset.ptitle || '', via: 'task' }); toast((st2 === 'done' ? 'Task erledigt (Archiv): ' : 'Task ' + ST_LBL[st2] + ': ') + (b.dataset.ptitle || '').slice(0, 60)); paintHeute(); } }, true);
-  document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
-    if (b.dataset.ptdone) { decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '' }); toast('Punkt erledigt: ' + (b.dataset.ptitle || '').slice(0, 60)); }
-    else decide(b.dataset.ptundo, 'open', { kind: 'lage' }); }, true);
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    if (b.dataset.ptdone) {   // Punkt erledigt = auch seine offenen Mails erledigt (Chris 02.11.: ein Klick genügt, verschwindet sofort)
+      const li = b.closest('li'); const mids = ((li && li.dataset.mids) || '').split('\n').filter(Boolean);
+      const open = mids.map(id => st.mails.find(m => m.internetMessageId === id)).filter(m => m && !mailDone(m));
+      open.forEach(m => { st.dec['mail:' + m.internetMessageId] = { status: 'done', at: new Date().toISOString(), subject: m.subject || '', via: 'lage' }; });
+      await decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '', mails: open.map(m => m.internetMessageId) });
+      for (const m of open) await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', via: 'lage' });
+      kpis(); paintMails(); toast('Punkt erledigt' + (open.length ? ' (+' + open.length + ' Mail' + (open.length > 1 ? 's' : '') + ')' : '') + ': ' + (b.dataset.ptitle || '').slice(0, 60));
+      if (open.length === 1) offerFile(open[0]); }
+    else {   // Wieder offen: auch die Mails, die mit dem Punkt erledigt wurden
+      const prev = st.dec[b.dataset.ptundo] || {}; const mids = (prev.mails || []).filter(id => (st.dec['mail:' + id] || {}).via === 'lage' && st.dec['mail:' + id].status === 'done');
+      await decide(b.dataset.ptundo, 'open', { kind: 'lage' });
+      for (const id of mids) await decide('mail:' + id, 'reopened', { via: 'lage' });
+      if (mids.length) { kpis(); paintMails(); } } }, true);
   let nmAddrLoaded = false;
   async function loadAddr() {
     if (nmAddrLoaded) return; nmAddrLoaded = true; const cnt = {}, nm = {};
