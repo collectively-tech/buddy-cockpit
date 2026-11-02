@@ -53,6 +53,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
+.morechats{ display:inline-block; margin:2px 4px; } .morechats > summary{ cursor:pointer; font-size:12px; color:var(--ink3); list-style:none; } .morechats > summary::before{ content:'▸ '; } .morechats[open] > summary::before{ content:'▾ '; } .morechats[open]{ display:block; }
 .bver{ font-size:11px; color:var(--ink3); margin-right:8px; align-self:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .okchip{ color:var(--ok) !important; } .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
@@ -1264,7 +1265,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '00e3841680';
+  const BUILD = '3b56ea1fb4';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1366,9 +1367,17 @@ if (S.cockpit) {
     const sess = (th.sessions || []).map(n => '„' + n + '“').join(', ');
     return '<div class="tchips"><span class="tth">Thema: <b>' + esc(th.title) + '</b></span>'
       + (th.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + th.chat)) + '">Chat öffnen ↗</a>' : '')
-      + (th.sessions || []).map(n => { const sid = sessId(n);
-          return sid ? chatChip(th.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung im Projekt Buddy öffnen')
-            : (proj ? chatChip(th.id, n, claudeLink('project/' + proj), 'Im Projekt Buddy oben in der Liste') : ''); }).join('')
+      + (() => {   // nur Chats zeigen, die zum Punkt passen; übrige Chats des Themas eingeklappt (Chris 02.11.: Toni-Migration zeigte Dynadot/Devin)
+          const one = n => { const sid = sessId(n);
+            return sid ? chatChip(th.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung im Projekt Buddy öffnen')
+              : (proj ? chatChip(th.id, n, claudeLink('project/' + proj), 'Im Projekt Buddy oben in der Liste') : ''); };
+          const all = th.sessions || []; if (all.length <= 1) return all.map(one).join('');
+          const wd = t => normT(t).split(' ').filter(w => w.length >= 4);
+          const gen = new Set(wd(th.title + ' chat lauf status thema buddy cockpit punkt task mail mails'));
+          const ctx = new Set(wd(context).filter(w => !gen.has(w)));
+          const rel = all.filter(n => wd(n).some(w => !gen.has(w) && ctx.has(w))), rest = all.filter(n => !rel.includes(n));
+          return rel.map(one).join('') + (rest.length ? '<details class="morechats"><summary>' + (rel.length ? '+' + rest.length + ' weitere' : rest.length) + ' Chat' + (rest.length > 1 ? 's' : '') + ' zum Thema (nicht zu diesem Punkt)</summary>' + rest.map(one).join('') + '</details>' : '');
+        })()
       + (noNew ? '' : '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + th.title + '“' + (th.folder ? ' (Projektordner ' + th.folder + ', zuerst dessen README lesen, falls vorhanden)' : '') + '. Anlass aus dem Cockpit: ' + context.slice(0, 700) + ' Was schlägst du vor?')) + '" title="Neuer Chat mit Buddy zum Thema, mit diesem Punkt als Anlass">Neuer Chat zum Thema ↗</a>') + '</div>';
   }
 
