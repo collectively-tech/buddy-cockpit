@@ -54,6 +54,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .morechats{ display:inline-block; margin:2px 4px; } .morechats > summary{ cursor:pointer; font-size:12px; color:var(--ink3); list-style:none; } .morechats > summary::before{ content:'▸ '; } .morechats[open] > summary::before{ content:'▾ '; } .morechats[open]{ display:block; }
+.mail.unpinned{ opacity:.55; }
 .bver{ font-size:11px; color:var(--ink3); margin-right:8px; align-self:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .okchip{ color:var(--ok) !important; } .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
@@ -1281,7 +1282,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '96da3f99b6';
+  const BUILD = '0187f905d2';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1761,7 +1762,7 @@ if (S.cockpit) {
     const when = new Date(m.receivedDateTime);
     const w = when.toDateString() === new Date().toDateString() ? 'heute ' + when.toTimeString().slice(0, 5) : whenOf(m.receivedDateTime);
     const linked = tasksForMail(m);
-    return '<div class="mail' + (m.isRead ? '' : ' unread') + '" data-mid="' + esc(m.id) + '">'
+    return '<div class="mail' + (m.isRead ? '' : ' unread') + (st.pinOnly && !m.pinned && st.pinKeep && st.pinKeep.has(m.id) ? ' unpinned' : '') + '" data-mid="' + esc(m.id) + '">'
       + '<div class="mt"><span class="mf">' + esc(fromOf(m)) + '</span><span class="mw">' + (m.parentFolderId && !st.mails.includes(m) && folderLabel(m.parentFolderId) ? '📁 ' + esc(folderLabel(m.parentFolderId)) + ' · ' : '') + w + '</span></div>'
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + (m.pinned ? '<span title="In Outlook angeheftet">📌</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments && !S.listAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
@@ -1780,7 +1781,7 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
-      + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : '📌 Anheften') + '</button>' : '')
+      + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : st.pinKeep && st.pinKeep.has(m.id) ? '📌 Wieder anheften' : '📌 Anheften') + '</button>' : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
@@ -1805,7 +1806,8 @@ if (S.cockpit) {
     const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length, nPin = list.filter(m => m.pinned).length, nQ = list.length;
     if (st.unreadOnly) list = list.filter(m => !m.isRead);
     if (st.attOnly) list = list.filter(m => m.hasAttachments);
-    if (st.pinOnly) list = list.filter(m => m.pinned);
+    if (!st.pinKeep) st.pinKeep = new Set();
+    if (st.pinOnly) list = list.filter(m => m.pinned || st.pinKeep.has(m.id));   // im Filter gelöste bleiben ausgegraut stehen, bis Filter wechselt oder neu geladen wird
     const srv = st.attOnly && q.length >= 2 && S.searchAttachments;
     if (srv && (!st.attHits || st.attHits.q !== q)) { st.attHits = { q, list: null }; clearTimeout(st.attT); st.attT = setTimeout(async () => { try { const r = await S.searchAttachments(q); if (st.attHits && st.attHits.q === q) { st.attHits.list = r; paintMails(); } } catch (e) { if (st.attHits && st.attHits.q === q) { st.attHits.list = []; st.attHits.err = e.message; paintMails(); } } }, 500); }
     const inIds = new Set(list.map(m => m.id));
@@ -1840,7 +1842,7 @@ if (S.cockpit) {
       + sec('done', 'Von dir erledigt', 'im Cockpit abgehakt, Buddy schlägt sie nicht mehr vor', isOpen('done', false))
       + sec('old', 'Älter', st.triageDate ? 'vor Buddys Einordnung, nicht bewertet' : 'älter als 24 Stunden', isOpen('old', !!q || !!st.unreadOnly || !!st.attOnly || !!st.pinOnly));
     if ($('btnUnread')) $('btnUnread').onclick = () => { setUnread(false); paintMails(); kpis(); };
-    $('btnPin').onclick = () => { st.pinOnly = !st.pinOnly; lsSet('cockpit-pin', st.pinOnly ? '1' : ''); if (st.pinOnly) setUnread(false); if (st.pinOnly) lsSet('cockpit-open', JSON.stringify({ needs: true, neu: true, waiting: true, info: true, done: true, old: true })); paintMails(); };
+    $('btnPin').onclick = () => { st.pinOnly = !st.pinOnly; st.pinKeep = new Set(); lsSet('cockpit-pin', st.pinOnly ? '1' : ''); if (st.pinOnly) setUnread(false); if (st.pinOnly) lsSet('cockpit-open', JSON.stringify({ needs: true, neu: true, waiting: true, info: true, done: true, old: true })); paintMails(); };
     $('btnAtt').onclick = () => { st.attOnly = !st.attOnly; lsSet('cockpit-att', st.attOnly ? '1' : ''); paintMails(); };
   }
   // ---- Portfolio-Ansicht aus knowledge/cockpit/portfolio.json (erzeugt von operations/build-cockpit.py aus dem Register) ----
@@ -2046,16 +2048,20 @@ if (S.cockpit) {
   async function doMove(mid, fid, quiet) {
     const m = anyMail(mid); const f = (st.folders || []).find(x => x.id === fid); if (!m || !f) return;
     const b = fileBar(); b.querySelectorAll('button,select').forEach(x => { x.disabled = true; });
-    try { const r = await S.moveMessage(m.id, f.id);
+    try { const wasPinned = !!(m.pinned && S.setPinned);   // angeheftete Mail: Pin vor dem Verschieben lösen (Chris 02.11.)
+      if (wasPinned) { await S.setPinned(m.id, false, m.receivedDateTime); m.pinned = false; }
+      const r = await S.moveMessage(m.id, f.id);
       st.mails = st.mails.filter(x => x !== m); if (st.inbox && st.inbox.totalItemCount) st.inbox.totalItemCount--;
       b.style.display = 'none'; kpis(); paintMails(); paintHeute(); setTimeout(nextFile, 0);
       decide('file:' + m.internetMessageId, 'moved', { folder: f.name, subject: m.subject || '' });
       if (st.learn) { const a = addrOf(m), k = (map, key) => { if (!key) return; const o = map[key] || (map[key] = {}); o[f.id] = (o[f.id] || 0) + 1; }; k(st.learn.conv, m.conversationId); k(st.learn.snd, a); }
-      if (!quiet) toast('Verschoben nach „' + f.name + '“', async () => {
+      if (!quiet) toast('Verschoben nach „' + f.name + '“' + (wasPinned ? ', Pin gelöst' : ''), async () => {
         try { const inboxId = Object.keys(st.sysFolders || {}).find(k => st.sysFolders[k] === 'inbox') || 'inbox';
-          const back = await S.moveMessage(r.id, inboxId); m.id = back.id; if (back.webLink) m.webLink = back.webLink; st.mails.push(m);
+          const back = await S.moveMessage(r.id, inboxId); m.id = back.id; if (back.webLink) m.webLink = back.webLink;
+          if (wasPinned) { await S.setPinned(m.id, true, m.receivedDateTime); m.pinned = true; }
+          st.mails.push(m);
           st.mails.sort((a, c) => c.receivedDateTime.localeCompare(a.receivedDateTime)); if (st.inbox) st.inbox.totalItemCount++;
-          decide('file:' + m.internetMessageId, 'undone'); kpis(); paintMails(); paintHeute(); toast('Zurück in der Inbox.');
+          decide('file:' + m.internetMessageId, 'undone'); kpis(); paintMails(); paintHeute(); toast('Zurück in der Inbox' + (wasPinned ? ', wieder angeheftet.' : '.'));
         } catch (e) { setStatus('Zurückholen fehlgeschlagen: ' + e.message, 'err'); } });
     } catch (e) { b.querySelectorAll('button,select').forEach(x => { x.disabled = false; }); setStatus(e.message, 'err'); }
   }
@@ -2077,7 +2083,7 @@ if (S.cockpit) {
     const bp = e.target.closest && e.target.closest('[data-mpin]'); if (!bp) return;
     const m = anyMail(bp.dataset.mpin); if (!m) return;
     const v = bp.dataset.v === '1'; bp.disabled = true;
-    try { await S.setPinned(m.id, v, m.receivedDateTime); m.pinned = v; paintMails(); toast(v ? 'In Outlook angeheftet.' : 'Nicht mehr angeheftet.'); }
+    try { await S.setPinned(m.id, v, m.receivedDateTime); m.pinned = v; if (!v && st.pinOnly) st.pinKeep.add(m.id); paintMails(); toast(v ? 'In Outlook angeheftet.' : 'Nicht mehr angeheftet.'); }
     catch (err) { bp.disabled = false; setStatus(err.message, 'err'); }
   });
   document.addEventListener('change', e => { const fp = e.target.closest('[data-fpick]'); if (fp && fp.value) doMove(fileBar().dataset.mid, fp.value); });
