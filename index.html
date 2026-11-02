@@ -1272,7 +1272,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '2acc6a3169';
+  const BUILD = '7a094fe05d';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1791,7 +1791,7 @@ if (S.cockpit) {
     let list = q ? st.mails.filter(m => { const h = ((m.subject || '') + ' ' + fromOf(m) + ' ' + addrOf(m) + ' ' + (m.bodyPreview || '')).toLowerCase(); return qAlt.some(x => h.includes(x)); }) : st.mails;
     if (st.attOnly === undefined) st.attOnly = !!lsGet('cockpit-att');
     if (!st.learn && S.moveMessage && (!st.learnTry || Date.now() - st.learnTry > 30e3)) setTimeout(loadLearn, 0);
-    const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length;
+    const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length, nQ = list.length;
     if (st.unreadOnly) list = list.filter(m => !m.isRead);
     if (st.attOnly) list = list.filter(m => m.hasAttachments);
     const srv = st.attOnly && q.length >= 2 && S.searchAttachments;
@@ -1803,7 +1803,7 @@ if (S.cockpit) {
     if (fts && (!st.ftHits || st.ftHits.q !== q)) { st.ftHits = { q, list: null }; clearTimeout(st.ftT); st.ftT = setTimeout(async () => { try { const terms = qAlt.slice(0, 3); const rs = await Promise.all(terms.map(t => S.searchAll(t))); const seen = {}, r = [].concat(...rs).filter(m => !seen[m.id] && (seen[m.id] = 1)).sort((a, b) => (b.receivedDateTime || '').localeCompare(a.receivedDateTime || '')); await loadFolders().catch(() => {}); if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = r; paintMails(); } } catch (e) { if (st.ftHits && st.ftHits.q === q) { st.ftHits.list = []; st.ftHits.err = e.message; paintMails(); } } }, 600); }
     const fh = fts && st.ftHits && st.ftHits.q === q ? st.ftHits : null;
     const ftList = fh && fh.list ? fh.list.filter(m => !inIds.has(m.id) && st.mails.every(x => x.id !== m.id) && (!st.unreadOnly || !m.isRead)) : [];   // Filter „Nur ungelesene“ gilt auch hier, Inbox-Mails nie doppelt (Chris 23.10.)
-    const ftHtml = !fts ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Weitere Treffer zu „' + esc(st.mq.trim()) + '“' + (st.unreadOnly ? ', nur ungelesene' : '') + '</span><span class="cnt2">' + (fh && fh.list ? ftList.length : '…') + '</span><span class="cs">andere Ordner: abgelegt, Gesendet, Archiv</span></summary>'
+    const ftHtml = !fts ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Weitere Treffer zu „' + esc(st.mq.trim()) + '“' + (st.unreadOnly ? ', nur ungelesene' + (fh && fh.list ? (n => n ? ' (' + n + ' gelesene ausgeblendet)' : '')(fh.list.filter(m => !inIds.has(m.id) && st.mails.every(x => x.id !== m.id) && m.isRead).length) : '') : '') + '</span><span class="cnt2">' + (fh && fh.list ? ftList.length : '…') + '</span><span class="cs">andere Ordner: abgelegt, Gesendet, Archiv</span></summary>'
       + (!fh || !fh.list ? '<div class="empty">Suche läuft …</div>' : fh.err ? '<div class="errbox">' + esc(fh.err) + '</div>' : ftList.slice(0, 25).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
@@ -1819,7 +1819,7 @@ if (S.cockpit) {
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
     $('mlist').innerHTML = '<div class="mfilter">' + (S.createNewDraft ? '<button data-newmail="1" data-subj="">✉ Neue Mail</button> ' : '') + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
-      + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
+      + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' + (nQ - list.length ? ', ' + (nQ - list.length) + ' durch Filter ausgeblendet (' + [st.unreadOnly && 'Nur ungelesene', st.attOnly && 'Anhänge'].filter(Boolean).join(', ') + ')' : '') : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml + ftHtml
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
