@@ -153,7 +153,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 .nx select.nxf{ max-width:240px; font-size:12px; padding:2px 4px; margin-left:4px; }
 .chip.ghostchip{ background:transparent; border:1px dashed var(--line2); color:var(--ink2); cursor:default; }
 .nx{ display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:6px 0 2px; padding:6px 8px; border-radius:8px; background:var(--tagbg); font-size:12.5px; } .nx .nxt{ flex:1; min-width:180px; } .nx .nxw{ color:var(--ink2); }
-.kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; }
+.kpi.on{ outline:2px solid var(--acc); outline-offset:-2px; } .kpi.on .ks, .kpi.on .kl{ color:var(--bg); opacity:.8; }
 .lmove{ border-style:dashed; }
 .matt{ margin:6px 0 2px; font-size:12px; } .matt summary{ cursor:pointer; color:var(--ink2); } .arow{ display:flex; gap:8px; align-items:center; padding:3px 0; } .arow .an{ flex:1; min-width:0; overflow-wrap:anywhere; } .arow .as{ color:var(--ink2); font-size:11px; white-space:nowrap; }
 .toast button{ background:transparent; color:#93c5fd; border:none; font-weight:700; padding:0; }
@@ -187,6 +187,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <input type="search" id="q" placeholder="Suchen (Titel, Notiz, Tags)">
   <button id="btnHold" title="On-Hold-Tasks ein- oder ausblenden">On-Hold zeigen</button>
   <button id="btnWait" title="Wartende Tasks ein- oder ausblenden">Wartet ausblenden</button>
+  <button id="btnOver" title="Nur aktive Tasks mit Fälligkeit vor heute">Überfällig</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -770,6 +771,7 @@ const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
+let onlyOver = false;   // Filter „Überfällig“ (Chris 02.11.), gleiche Regel wie Kennzahl: aktiv und fällig vor heute
 let hideWait = false; try { hideWait = localStorage.getItem('tb-hide-wait') === '1'; } catch (e) { /* Standard: wartende sichtbar (Chris 29.10.) */ }
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -858,10 +860,12 @@ function render() {
   keys.clear();
   const q = $('q').value.trim().toLowerCase();
   const panels = C.view(model);
-  let total = 0, arch = 0, holdN = 0, waitN = 0;
+  let total = 0, arch = 0, holdN = 0, waitN = 0, overN = 0; const tdy = new Date().toLocaleDateString('sv-SE');
+  const isOver = l => l.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdy;
   const html = panels.map((p, pi) => {
-    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold') && (!hideWait || q || t.line.status !== 'wait'));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
-    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length;
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || q || t.line.status !== 'hold') && (!hideWait || q || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length; overN += p.visible.filter(t => isOver(t.line)).length;
+    if (onlyOver && !vis.length) return '';
     const rows = vis.map(t => {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
@@ -895,12 +899,14 @@ function render() {
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
+  $('btnOver').textContent = onlyOver ? 'Alle zeigen' : 'Überfällig (' + overN + ')'; $('btnOver').classList.toggle('on', onlyOver);
   $('btnWait').textContent = hideWait ? 'Wartet zeigen (' + waitN + ')' : 'Wartet ausblenden'; $('btnWait').classList.toggle('on', hideWait);
   $('foot').textContent = total + ' offene Aufgaben' + (waitN ? ', ' + waitN + ' wartet' : '') + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold || q ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
   if (onRender) onRender();
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
+$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) showArch = false; render(); };
 $('btnWait').onclick = () => { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
@@ -1265,7 +1271,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '3b56ea1fb4';
+  const BUILD = '8a39467e2e';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
