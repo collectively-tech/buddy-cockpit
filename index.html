@@ -1282,7 +1282,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '0187f905d2';
+  const BUILD = '02fcf61150';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1388,7 +1388,7 @@ if (S.cockpit) {
           const one = n => { const sid = sessId(n);
             return sid ? chatChip(th.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung im Projekt Buddy öffnen')
               : (proj ? chatChip(th.id, n, claudeLink('project/' + proj), 'Im Projekt Buddy oben in der Liste') : ''); };
-          const all = th.sessions || []; if (all.length <= 1) return all.map(one).join('');
+          const all = th.sessions || []; if (!all.length) return '';   // auch ein einzelner Chat nur, wenn er passt (Chris 02.11.: NetJets zeigte „Vinod Khosla“)
           const wd = t => normT(t).split(' ').filter(w => w.length >= 4);
           const gen = new Set(wd(th.title + ' chat lauf status thema buddy cockpit punkt task mail mails'));
           const ctx = new Set(wd(context).filter(w => !gen.has(w)));
