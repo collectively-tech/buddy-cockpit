@@ -1282,7 +1282,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'af47abd132';
+  const BUILD = 'fbf5e51368';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1579,7 +1579,7 @@ if (S.cockpit) {
     document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
       const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
-      const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc(t.l.title.split(/[:(]/)[0].trim().slice(0, 40)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-lkey="' + esc('lage:' + title.toLowerCase().replace(/\s+/g, ' ')) + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
+      const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc((t.l.title.split(/[:(]/)[0].trim().length < 15 ? t.l.title.split('(')[0].trim() : t.l.title.split(/[:(]/)[0].trim()).slice(0, 50)) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-lkey="' + esc('lage:' + title.toLowerCase().replace(/\s+/g, ' ')) + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('');
       const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); li.dataset.tstatus = cur; });
     // Filter in „Wartet auf“ wie im Reiter Tasks (Chris 29.10.): On-Hold standardmässig aus, Wartet ein
     const wl = document.querySelector('#v-heute li[data-wa]'); if (!wl) return; const ol = wl.parentElement;
