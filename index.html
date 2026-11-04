@@ -56,6 +56,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .morechats{ display:inline-block; margin:2px 4px; } .morechats > summary{ cursor:pointer; font-size:12px; color:var(--ink3); list-style:none; } .morechats > summary::before{ content:'▸ '; } .morechats[open] > summary::before{ content:'▾ '; } .morechats[open]{ display:block; }
 .mail.unpinned{ opacity:.55; }
 .bver{ font-size:11px; color:var(--ink3); margin-right:8px; align-self:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
+.tstar{ background:none; border:0; padding:0 6px 0 0; font-size:17px; line-height:1; color:var(--ink3); cursor:pointer; align-self:flex-start; margin-top:2px; } .tstar.on{ color:#f59e0b; }
+.mstar.on{ color:#b45309; border-color:#f59e0b; } li.starred{ } .starmark{ color:#f59e0b; font-weight:700; }
 .okchip{ color:var(--ok) !important; } .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
 .sugcard{ margin-bottom:14px; border-color:var(--acc); } .prow.sug{ cursor:default; flex-wrap:wrap; align-items:flex-start; } .prow.sug .pt{ flex:1 1 360px; } .prow.sug .sa{ flex:0 1 auto; max-width:100%; display:flex; flex-wrap:wrap; justify-content:flex-end; align-items:center; gap:6px; margin-left:auto; } .prow.sug button{ font-size:12px; padding:5px 10px; } .prow.sug.busy{ opacity:.55; } .lacts{ display:flex; flex-direction:column; gap:6px; margin:6px 0 2px; } .lact{ display:flex; flex-wrap:wrap; align-items:center; gap:6px; font-size:12.5px; } .lact .laf{ color:var(--ink3); font-weight:600; } .lact .btn, .lact button{ font-size:12px; padding:4px 10px; } .lact details.drf{ flex-basis:100%; } .prow.sug button:disabled{ cursor:wait; }
@@ -883,7 +885,8 @@ function render() {
       tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>'); b += chipsHtml(l);
       const note = field(l, 'note');
       return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="true" data-k="' + id + '">'
-        + '<button class="chk" title="Erledigt, archivieren" data-arch="' + id + '"></button><div class="body">'
+        + '<button class="chk" title="Erledigt, archivieren" data-arch="' + id + '"></button>'
+        + '<button class="tstar' + (isStar(l) ? ' on' : '') + '" data-star="' + id + '" title="' + (isStar(l) ? 'Braucht mich: aus Heute/Lage nehmen' : 'Braucht mich: in Heute und Lage unter „Braucht dich“') + '">' + (isStar(l) ? '★' : '☆') + '</button><div class="body">'
         + '<div class="t">' + t.num + '/ ' + esc(l.title) + '</div>' + (note ? '<div class="n">' + esc(note) + '</div>' : '')
         + (b ? '<div class="meta">' + b + '</div>' : '') + '</div></div>';
     }).join('');
@@ -922,6 +925,7 @@ $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem(
 // ---------- Klicks ----------
 $('grid').addEventListener('click', e => {
   const a = e.target.closest('[data-arch]'); if (a) { e.stopPropagation(); archive(a.dataset.arch); return; }
+  const sb = e.target.closest('[data-star]'); if (sb) { e.stopPropagation(); toggleStar(sb.dataset.star, sb); return; }
   const r = e.target.closest('[data-react]'); if (r) { commit({ type: 'status', key: keys.get(r.dataset.react), status: 'active' }); return; }
   const pe = e.target.closest('[data-pedit]'); if (pe) { openPanel(pe.dataset.pedit); return; }
   if (e.target.closest('input') || e.target.closest('a')) return;
@@ -954,6 +958,16 @@ function openTask(id) {
   $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
   $('eTopic').innerHTML = ''; if (onTaskOpen) onTaskOpen(l);
   $('ePos').value = ''; $('eArchive').style.display = ''; $('dlgTask').showModal();
+}
+// „Braucht mich“ (Chris 04.11.): Tag #brauchtmich, Task erscheint in Heute unter „Braucht dich“ und Buddy führt ihn in der Lage
+const STAR_TAG = '#brauchtmich';
+function isStar(l) { return tagsOf(l).some(g => g.toLowerCase() === STAR_TAG); }
+async function toggleStar(id, btn) {
+  const key = keys.get(id); if (!key || !model) return; const line = model.lines[+String(id).replace(/^\D+/, '')]; if (!line) return;
+  const on = !isStar(line); const tags = tagsOf(line).filter(g => g.toLowerCase() !== STAR_TAG); if (on) tags.push(STAR_TAG);
+  if (btn) btn.disabled = true; const okay = await commit({ type: 'edit', key, tags: tags.join(', ') });
+  if (okay && typeof toast === 'function') toast(on ? 'Braucht mich: steht in Heute, Buddy führt es in der Lage.' : 'Nicht mehr „Braucht mich“.');
+  if (btn) btn.disabled = false;
 }
 function openNewTask(pre) {
   pre = pre || {}; const panels = C.view(model).map(p => p.name);
@@ -1282,7 +1296,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '5fa5656595';
+  const BUILD = '9086057a28';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1404,8 +1418,10 @@ if (S.cockpit) {
     return C.view(model).flatMap(p => p.visible).filter(t => linksOf(t.line).includes(m.webLink));
   }
   const mailDone = m => { const d = st.dec['mail:' + m.internetMessageId]; return !!d && d.status === 'done'; };
+  const mailStar = m => { const d = st.dec['star:' + m.internetMessageId]; return !!d && d.status === 'on'; };   // „Braucht mich“ (Chris 04.11.)
   function mailCat(m) {
     if (mailDone(m)) return 'done';
+    if (mailStar(m)) return 'needs';
     const tr = st.triage[m.internetMessageId] || {}, c = tr.cat;
     if (/scanner/i.test(fromOf(m)) && !/^erledigt/i.test(tr.why || '')) return 'needs';   // eigene Scans sind immer To-dos, bis erledigt (Chris 05.10.)
     if (c) return c;
@@ -1525,8 +1541,23 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addNewMailChips(); addStatusChips(); hideDonePoints();
+    addStarred(); addNewMailChips(); addStatusChips(); hideDonePoints();
   }
+  // „Braucht mich“ sofort in Heute zeigen (bis Buddy sie beim nächsten Lauf in die Lage nimmt): markierte Mails und Tasks, die die Lage noch nicht nennt
+  function addStarred() {
+    const lis = [...document.querySelectorAll('#v-heute li[data-bi]')]; const ol = lis.length ? lis[0].parentElement : null; if (!ol) return;
+    ol.querySelectorAll('li.starred').forEach(x => x.remove());
+    const lageTxt = normT(lis.map(li => li.textContent).join(' '));
+    const inLage = t => { const w = normT(t).split(' ').filter(x => x.length >= 4).slice(0, 4); return w.length >= 2 && w.every(x => lageTxt.includes(x)); };
+    const ms = st.mails.filter(m => mailStar(m) && !mailDone(m) && !inLage(m.subject || ''));
+    const ts = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status !== 'done' && tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich') && !inLage(t.line.title)) : [];
+    ms.forEach(m => ol.insertAdjacentHTML('beforeend', '<li class="starred"><span class="starmark">★</span> <b>' + esc((m.subject || '(ohne Betreff)').slice(0, 90)) + '.</b> Mail von ' + esc(fromOf(m)) + ', ' + esc(whenOf(m.receivedDateTime)) + '. Von dir markiert, Buddy nimmt es beim nächsten Lauf in die Lage. <a class="chip" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a> <a class="chip" data-mstar="' + esc(m.id) + '">☆ entfernen</a></li>'));
+    ts.forEach(t => { const kid = 'sk' + t.idx; keys.set(kid, C.keyOf(model, t.idx)); ol.insertAdjacentHTML('beforeend', '<li class="starred"><span class="starmark">★</span> <b>' + esc(t.line.title.slice(0, 90)) + '.</b> Task ' + t.num + '/. Von dir markiert, Buddy nimmt es beim nächsten Lauf in die Lage. <a class="chip" data-open="' + kid + '">Task öffnen</a></li>'); });
+  }
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-mstar]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const m = anyMail(b.dataset.mstar); if (!m) return; const on = !mailStar(m);
+    await decide('star:' + m.internetMessageId, on ? 'on' : 'off', { subject: m.subject || '', from: fromOf(m), received: m.receivedDateTime || '' });
+    kpis(); paintMails(); toast(on ? 'Braucht mich: steht jetzt unter „Braucht dich“, Buddy führt es in der Lage.' : 'Nicht mehr „Braucht mich“.'); }, true);
   // Erledigte Punkte sofort ausblenden, ohne Aktualisieren (Chris 02.11.); pro Liste ein Knopf zum Zeigen
   let showDone = false;
   function hideDonePoints() {
@@ -1781,6 +1812,7 @@ if (S.cockpit) {
       + (!tr.draft && dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>' : '')
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
+      + (mailDone(m) ? '' : '<button class="mstar' + (mailStar(m) ? ' on' : '') + '" data-mstar="' + esc(m.id) + '" title="' + (mailStar(m) ? 'Nicht mehr „Braucht mich“' : 'Für mich wichtig: unter „Braucht dich“, Buddy führt es in der Lage') + '">' + (mailStar(m) ? '★ Braucht mich' : '☆ Braucht mich') + '</button>')
       + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : st.pinKeep && st.pinKeep.has(m.id) ? '📌 Wieder anheften' : '📌 Anheften') + '</button>' : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
@@ -1924,7 +1956,7 @@ if (S.cockpit) {
     try {
       const cur = await S.readPath(P.decisions).catch(() => null);
       let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
-      d.note = 'Entscheide von Chris im Cockpit (Vorschläge, Hinweise, Entwürfe draft:<id>, erledigte Mails mail:<internetMessageId>). Schreibt das Cockpit, lesen Morgenlauf und cockpit-update.';
+      d.note = 'Entscheide von Chris im Cockpit (Vorschläge, Hinweise, Entwürfe draft:<id>, erledigte Mails mail:<internetMessageId>, „Braucht mich“ star:<internetMessageId> on/off). Schreibt das Cockpit, lesen Morgenlauf und cockpit-update.';
       d.items = Object.assign(d.items || {}, { [id]: st.dec[id] });
       await S.writePath(P.decisions, JSON.stringify(d, null, 1));
     } catch (e) { setStatus('Entscheid nicht gespeichert: ' + e.message, 'err'); }
