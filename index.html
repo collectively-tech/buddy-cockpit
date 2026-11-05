@@ -1301,7 +1301,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '128a26cd6c';
+  const BUILD = 'fa72e0864b';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1556,8 +1556,10 @@ if (S.cockpit) {
     ol.querySelectorAll('li.starred').forEach(x => x.remove());
     const lageTxt = normT(lis.map(li => li.textContent).join(' '));
     const inLage = t => { const w = normT(t).split(' ').filter(x => x.length >= 4).slice(0, 4); return w.length >= 2 && w.every(x => lageTxt.includes(x)); };
-    const ms = st.mails.filter(m => mailStar(m) && !mailDone(m) && !inLage(m.subject || ''));
-    const ts = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status !== 'done' && tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich') && !inLage(t.line.title)) : [];
+    const allMids = new Set(lis.flatMap(li => (li.dataset.mids || '').split('\n').filter(Boolean)));   // Mail hängt schon an einem Lage-Punkt = nicht doppelt führen (Chris 05.11.)
+    const ptTasks = new Set(lis.map(li => { const b = li.querySelector(':scope > b, :scope > strong'); const t = taskForPoint(((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim()); return t ? t.i : -1; }));
+    const ms = st.mails.filter(m => mailStar(m) && !mailDone(m) && !allMids.has(m.internetMessageId) && !inLage(m.subject || ''));
+    const ts = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status !== 'done' && tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich') && !ptTasks.has(t.idx) && !inLage(t.line.title)) : [];
     ms.forEach(m => ol.insertAdjacentHTML('beforeend', '<li class="starred"><span class="starmark">★</span> <b>' + esc((m.subject || '(ohne Betreff)').slice(0, 90)) + '.</b> Mail von ' + esc(fromOf(m)) + ', ' + esc(whenOf(m.receivedDateTime)) + '. Von dir markiert, Buddy nimmt es beim nächsten Lauf in die Lage. <a class="chip" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Mail ↗</a> <a class="chip" data-mstar="' + esc(m.id) + '">☆ entfernen</a></li>'));
     ts.forEach(t => { const kid = 'k' + t.idx; keys.set(kid, C.keyOf(model, t.idx)); ol.insertAdjacentHTML('beforeend', '<li class="starred"><span class="starmark">★</span> <b>' + esc(t.line.title.slice(0, 90)) + '.</b> Task ' + t.num + '/. Von dir markiert, Buddy nimmt es beim nächsten Lauf in die Lage. <a class="chip" data-open="' + kid + '">Task öffnen</a> <a class="chip" data-ptstar="' + kid + '">☆ entfernen</a></li>'); });
   }
