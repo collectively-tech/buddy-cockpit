@@ -1301,7 +1301,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'fa72e0864b';
+  const BUILD = '33b5426f1f';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1535,9 +1535,10 @@ if (S.cockpit) {
       const have = wl ? wl.textContent.toLowerCase() : '';
       const wt = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status === 'wait') : [];   // Status wait ersetzt den Tag #wartet (Chris 16.10.2026)
       const key = t => (t.line.title.split(/[:(]/)[0] || t.line.title).trim().toLowerCase().slice(0, 18);
-      const miss = wt.filter(t => !have.includes(key(t)));
+      const biTasks = new Set([...document.querySelectorAll('#v-heute li[data-bi]')].map(li => { const b = li.querySelector(':scope > b, :scope > strong'); const x = taskForPoint(((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim()); return x ? x.i : -1; }));
+      const miss = wt.filter(t => !have.includes(key(t)) && !biTasks.has(t.idx));   // steht schon unter „Braucht dich“: nicht doppelt in „Wartet auf“ (Chris 05.11.)
       if (miss.length && wl) { let n = wl.querySelectorAll('li').length;
-        miss.forEach(t => { n++; const note = field(t.line, 'note'); wl.insertAdjacentHTML('beforeend', '<li value="' + n + '" class="wa" data-wa="' + n + '"><b>' + esc(t.line.title.split(':')[0]) + '.</b> ' + esc((t.line.title.split(':').slice(1).join(':') || '').trim()) + (field(t.line, 'due') ? ' Wiedervorlage ' + esc(fmtDue(field(t.line, 'due'))) + '.' : '') + ' <span class="cs">aus dem Board</span></li>'); }); } }
+        miss.forEach(t => { n++; const note = field(t.line, 'note'); wl.insertAdjacentHTML('beforeend', '<li value="' + n + '" class="wa" data-wa="' + n + '"><b>' + esc(t.line.title) + '.</b>' + (field(t.line, 'due') ? ' Wiedervorlage ' + esc(fmtDue(field(t.line, 'due'))) + '.' : '') + ' <span class="cs">aus dem Board</span></li>'); }); } }
     document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { const th = topicOf(li.textContent); if (th && !li.querySelector('.tchips')) li.insertAdjacentHTML('beforeend', topicChips(th, li.textContent.trim(), false)); });   // „Wartet auf“: Thema + Chats (Chris 10.10.)
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (li.dataset.struck) return; const txt = li.textContent; const th = topicOf(txt.split('\n')[0]) || (li.dataset.topic && st.themen && (st.themen.themes || []).find(t => t.id === li.dataset.topic)) || topicOf(txt); if (th) li.insertAdjacentHTML('beforeend', topicChips(th, txt.trim(), !!li.querySelector('.lacts')));
       // Punkt als Ganzes mit Buddy: neuer Chat mit Punkt + allen Mails, oder bestehender Chat (Text in die Zwischenablage, dort einfügen)
