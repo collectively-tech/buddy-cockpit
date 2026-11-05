@@ -50,13 +50,14 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md ol,.md ul{ margin:4px 0; padding-left:20px; } .md li{ margin:5px 0; } .md p{ margin:6px 0; } .md code{ font-size:12px; background:var(--holdbg); padding:1px 5px; border-radius:5px; }
 .md.links a{ font-weight:600; }
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
-.md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; }
+.md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; } .md li.bi.nomail::after{ content:none; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .morechats{ display:inline-block; margin:2px 4px; } .morechats > summary{ cursor:pointer; font-size:12px; color:var(--ink3); list-style:none; } .morechats > summary::before{ content:'▸ '; } .morechats[open] > summary::before{ content:'▾ '; } .morechats[open]{ display:block; }
 .mail.unpinned{ opacity:.55; }
 .bver{ font-size:11px; color:var(--ink3); margin-right:8px; align-self:center; white-space:nowrap; font-variant-numeric:tabular-nums; }
 .tstar{ background:none; border:0; padding:0 6px 0 0; font-size:17px; line-height:1; color:var(--ink3); cursor:pointer; align-self:flex-start; margin-top:2px; } .tstar.on{ color:#f59e0b; }
+#eStar{ margin-left:8px; padding:2px 10px; font-size:12px; }
 .mstar.on{ color:#b45309; border-color:#f59e0b; } li.starred{ } .starmark{ color:#f59e0b; font-weight:700; }
 .okchip{ color:var(--ok) !important; } .donechip{ font-size:11px; font-weight:700; color:var(--ok); background:rgba(22,163,74,.12); border-radius:20px; padding:1px 7px; }
 .md li.bi .tchips{ font-weight:400; }
@@ -212,7 +213,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   </div>
   <label>Wiederholung</label><input id="eRepeat" placeholder="leer = einmalig · z.B. monatlich 10 (Frist jeden 10.)">
   <label>Position im Panel</label><select id="ePos"><option value="">unverändert</option><option value="top">an den Anfang</option><option value="end">ans Ende</option></select>
-  <label>Tags (mit Komma getrennt)</label><input id="eTags" placeholder="#Roger, #Legal">
+  <label>Tags (mit Komma getrennt) <button type="button" id="eStar" class="mstar" title="Braucht mich: in Heute und Lage unter „Braucht dich“">☆ Braucht mich</button></label><input id="eTags" placeholder="#Roger, #Legal">
   <label>Verknüpft: Mails, Claude-Chats, Dateien (ein Link pro Zeile)</label><textarea id="eLinks" placeholder="https://claude.ai/chat/…&#10;https://outlook.office365.com/owa/?ItemID=…"></textarea>
   <div class="lhint">Chat-Link: im Claude-Chat oben „Teilen“ bzw. Adresse kopieren und hier einfügen. Mails hängst du im Reiter Mails mit „An Task hängen“ an.</div>
   <label>Notiz</label><textarea id="eNote"></textarea>
@@ -953,7 +954,7 @@ function openTask(id) {
   $('eTitle').value = l.title; $('eStatus').value = (l.status === 'hold' || l.status === 'wait') ? l.status : 'active';
   $('eDue').value = /^\d{4}-\d{2}-\d{2}$/.test(field(l, 'due')) ? field(l, 'due') : '';
   $('eDue').dataset.orig = field(l, 'due');
-  $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note'); $('eRepeat').value = field(l, 'repeat');
+  $('eTags').value = field(l, 'tags'); $('eNote').value = field(l, 'note'); $('eRepeat').value = field(l, 'repeat'); paintEStar();
   $('ePanel').innerHTML = panelOptions(editing.panel);
   $('eLinks').value = linksOf(l).join('\n'); $('eBuddy').href = buddyUrl(taskPrompt(l)); $('eBuddy').style.display = '';
   $('eTopic').innerHTML = ''; if (onTaskOpen) onTaskOpen(l);
@@ -969,13 +970,17 @@ async function toggleStar(id, btn) {
   if (okay && typeof toast === 'function') toast(on ? 'Braucht mich: steht in Heute, Buddy führt es in der Lage.' : 'Nicht mehr „Braucht mich“.');
   if (btn) btn.disabled = false;
 }
+function starTags(v) { return String(v || '').split(',').map(x => x.trim()).filter(Boolean); }
+function paintEStar() { const b = $('eStar'); if (!b) return; const on = starTags($('eTags').value).some(g => g.toLowerCase() === STAR_TAG); b.textContent = (on ? '★' : '☆') + ' Braucht mich'; b.classList.toggle('on', on); }
+$('eStar').onclick = () => { const t = starTags($('eTags').value); const on = t.some(g => g.toLowerCase() === STAR_TAG); $('eTags').value = (on ? t.filter(g => g.toLowerCase() !== STAR_TAG) : t.concat(STAR_TAG)).join(', '); paintEStar(); };
+$('eTags').addEventListener('input', paintEStar);
 function openNewTask(pre) {
   pre = pre || {}; const panels = C.view(model).map(p => p.name);
   const def = pre.panel || (panels.includes('Inbox') ? 'Inbox' : panels[0]);
   editing = { isNew: true, panel: def };
   $('dTitle').textContent = 'Neuer Task';
   $('eTitle').value = pre.title || ''; $('eStatus').value = 'active'; $('eDue').value = ''; $('eDue').dataset.orig = '';
-  $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || ''; $('eRepeat').value = '';
+  $('eTags').value = pre.tags || ''; $('eNote').value = pre.note || ''; $('eLinks').value = pre.link || ''; $('eRepeat').value = ''; paintEStar();
   $('ePanel').innerHTML = panelOptions(def);
   $('eTopic').innerHTML = '';
   $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
@@ -1296,7 +1301,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '9086057a28';
+  const BUILD = '90f3e3ee4a';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1507,7 +1512,8 @@ if (S.cockpit) {
       if (!linked.length && !struck) linked = guessLinks(li.textContent);   // Lauf hat nicht verknüpft: passende offene Mails über gemeinsame Namen/Stichworte finden
       { const all = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1));
         li.dataset.prompt = pointPrompt(li.textContent.trim(), all); }
-      li.dataset.mids = linked.map(x => x.id).join('\n'); li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
+      li.dataset.mids = linked.map(x => x.id).join('\n'); { const ids = linked.length ? linked.map(x => x.id) : Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(bkey(li.dataset.bi))).map(x => x.id); if (!st.mails.some(m => ids.includes(m.internetMessageId))) li.classList.add('nomail'); }   // ohne Mail im Posteingang: kein „Mails dazu“ (Chris 05.11.)
+      li.dataset.topic = (linked.find(x => x.topic) || {}).topic || '';   // für den Sprung zu „Mails“ (Pfeil am Punkt)
       // Aktionen direkt am Lage-Punkt: Mail, Antwort-Entwurf, Erledigt, Mit Buddy (ohne Wechsel zu „Mails“)
       const ms = st.mails.filter(m => linked.some(x => x.id === m.internetMessageId)).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1)).slice(0, 3);   // neueste zuerst
       if (ms.length) li.insertAdjacentHTML('beforeend', '<div class="lacts">' + ms.map(m => { const tr = triageOf(m);
@@ -1940,7 +1946,10 @@ if (S.cockpit) {
     const li0 = document.querySelector('#v-heute li[data-bi="' + n + '"]');
     const ids = new Set(li0 && li0.dataset.mids ? li0.dataset.mids.split('\n') : Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key)).map(x => x.id));
     const hits = st.mails.filter(m => ids.has(m.internetMessageId));
-    if (!hits.length) { toast('Zu Punkt ' + n + ' ist keine Mail im Posteingang verknüpft.'); return; }
+    if (!hits.length) {   // keine Mail: Task öffnen, falls einer dazugehört, sonst nichts tun (Chris 05.11.)
+      const b = li0 && li0.querySelector(':scope > b, :scope > strong'); const t = li0 && taskForPoint(((b && b.textContent) || ownText(li0).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim());
+      if (t) { const kid = 'pj' + t.i; keys.set(kid, C.keyOf(model, t.i)); openTask(kid); }
+      return; }
     st.mq = ''; $('mq').value = '';
     const li = document.querySelector('#v-heute li[data-bi="' + n + '"]');
     st.focus = { ids: new Set(hits.map(m => m.id)), label: 'Punkt ' + n + ': ' + (li ? li.textContent.replace(/\s*↗\s*$/, '').slice(0, 90) : '') };
