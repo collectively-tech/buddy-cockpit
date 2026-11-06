@@ -1301,7 +1301,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '33b5426f1f';
+  const BUILD = 'd4eb20fcc1';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1597,7 +1597,9 @@ if (S.cockpit) {
       const own = ownText(li);
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || own.split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim().slice(0, 120); if (!title) return;
       const key = 'lage:' + title.toLowerCase().replace(/\s+/g, ' '); const d = st.dec[key];
-      if (taskForPoint(title) && !(d && d.status === 'done')) return;   // mit Board-Task: „Task erledigt“ statt „Punkt erledigt“ (Chris 29.10.)
+      if (taskForPoint(title) && !(d && d.status === 'done')) {   // mit Board-Task: nur aus der Lage nehmen, Task bleibt wie er ist (Chris 06.11.)
+        const h2 = '<a class="chip" data-ptdone="' + esc(key) + '" data-keepmails="1" data-ptitle="' + esc(title) + '" title="Punkt aus der Lage nehmen, Board-Task und Mails bleiben unverändert. Buddy bringt ihn nicht wieder">Aus Lage nehmen</a>';
+        const tc2 = li.querySelector('.tchips'); if (tc2) tc2.insertAdjacentHTML('beforeend', h2); else li.insertAdjacentHTML('beforeend', ' ' + h2); return; }
       const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
       if (done) { li.classList.add('done'); if (!li.querySelector('.donechip')) li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); }
       const html = done ? '<a class="chip" data-ptundo="' + esc(key) + '" title="Punkt wieder als offen markieren">Wieder offen</a>' : '<a class="chip" data-ptask="1" data-ptitle="' + esc(title) + '" title="Board-Task aus diesem Punkt anlegen, danach Status wie Wartet oder On-Hold setzbar">+ Task</a> <a class="chip okchip" data-ptdone="' + esc(key) + '" data-ptitle="' + esc(title) + '" title="Nur den Lage-Punkt abhaken: Buddy bringt ihn nicht wieder">Punkt erledigt ✓</a>';
@@ -1642,11 +1644,11 @@ if (S.cockpit) {
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-ptdone],[data-ptundo]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     if (b.dataset.ptdone) {   // Punkt erledigt = auch seine offenen Mails erledigt (Chris 02.11.: ein Klick genügt, verschwindet sofort)
       const li = b.closest('li'); const mids = ((li && li.dataset.mids) || '').split('\n').filter(Boolean);
-      const open = mids.map(id => st.mails.find(m => m.internetMessageId === id)).filter(m => m && !mailDone(m));
+      const open = b.dataset.keepmails ? [] : mids.map(id => st.mails.find(m => m.internetMessageId === id)).filter(m => m && !mailDone(m));
       open.forEach(m => { st.dec['mail:' + m.internetMessageId] = { status: 'done', at: new Date().toISOString(), subject: m.subject || '', via: 'lage' }; });
       await decide(b.dataset.ptdone, 'done', { kind: 'lage', title: b.dataset.ptitle || '', mails: open.map(m => m.internetMessageId) });
       for (const m of open) await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', via: 'lage' });
-      kpis(); paintMails(); toast('Punkt erledigt' + (open.length ? ' (+' + open.length + ' Mail' + (open.length > 1 ? 's' : '') + ')' : '') + ': ' + (b.dataset.ptitle || '').slice(0, 60));
+      kpis(); paintMails(); toast((b.dataset.keepmails ? 'Aus Lage genommen' : 'Punkt erledigt') + (open.length ? ' (+' + open.length + ' Mail' + (open.length > 1 ? 's' : '') + ')' : '') + ': ' + (b.dataset.ptitle || '').slice(0, 60));
       if (open.length) { fileQ = open.slice(1); fileN = open.length; offerFile(open[0]); } }   // mehrere Mails: Ablage-Frage nacheinander (Chris 02.11.)
     else {   // Wieder offen: auch die Mails, die mit dem Punkt erledigt wurden
       const prev = st.dec[b.dataset.ptundo] || {}; const mids = (prev.mails || []).filter(id => (st.dec['mail:' + id] || {}).via === 'lage' && st.dec['mail:' + id].status === 'done');
