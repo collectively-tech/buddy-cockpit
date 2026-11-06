@@ -192,6 +192,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <button id="btnHold" title="On-Hold-Tasks ein- oder ausblenden">On-Hold zeigen</button>
   <button id="btnWait" title="Wartende Tasks ein- oder ausblenden">Wartet ausblenden</button>
   <button id="btnOver" title="Nur aktive Tasks mit Fälligkeit vor heute">Überfällig</button>
+  <button id="btnDated" title="Alle Tasks mit Datum, früh fällig zuerst">Terminiert</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -782,6 +783,7 @@ const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
+let onlyDated = false;   // Filter „Terminiert“ (Chris 06.11.): alle Tasks mit Datum als eine Liste, früh fällig zuerst
 let onlyOver = false;   // Filter „Überfällig“ (Chris 02.11.), gleiche Regel wie Kennzahl: aktiv und fällig vor heute
 let hideWait = false; try { hideWait = localStorage.getItem('tb-hide-wait') === '1'; } catch (e) { /* Standard: wartende sichtbar (Chris 29.10.) */ }
 const $ = id => document.getElementById(id);
@@ -871,26 +873,32 @@ function render() {
   keys.clear();
   const q = $('q').value.trim().toLowerCase();
   const panels = C.view(model);
-  let total = 0, arch = 0, holdN = 0, waitN = 0, overN = 0, hidN = 0; const tdy = new Date().toLocaleDateString('sv-SE');
-  const isOver = l => l.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdy;
-  const html = panels.map((p, pi) => {
-    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
-    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length; overN += p.visible.filter(t => isOver(t.line)).length;
-    if (q) hidN += p.visible.filter(t => matches(t.line, q)).length - vis.length;
-    if (onlyOver && !vis.length) return '';
-    const rows = vis.map(t => {
+  let total = 0, arch = 0, holdN = 0, waitN = 0, overN = 0, hidN = 0, datedN = 0; const dated = []; const tdy = new Date().toLocaleDateString('sv-SE');
+  function rowHtml(t, panelName) {
       const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx));
       const l = t.line, due = field(l, 'due');
       let b = l.status === 'hold' ? '<span class="hold">On-Hold</span>' : l.status === 'wait' ? '<span class="wait">' + esc(waitLabel(l)) + '</span>' : (due ? '<span class="due">⚠ ' + esc(fmtDue(due)) + '</span>' : '');
       if (field(l, 'repeat')) b += '<span class="hold" title="Wiederkehrend: ' + esc(field(l, 'repeat')) + '">↻ ' + esc(field(l, 'repeat')) + '</span>';
+      if (panelName && due && l.status !== 'active') b += '<span class="due">' + esc(fmtDue(due)) + '</span>';
+      if (panelName) b += '<span class="tag">' + esc(panelName) + '</span>';
       tagsOf(l).forEach(g => b += '<span class="tag">' + esc(g) + '</span>'); b += chipsHtml(l);
       const note = field(l, 'note');
-      return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="true" data-k="' + id + '">'
+      return '<div class="task' + (l.status === 'hold' ? ' paused' : '') + '" draggable="' + (panelName ? 'false' : 'true') + '" data-k="' + id + '">'
         + '<button class="chk" title="Erledigt, archivieren" data-arch="' + id + '"></button>'
         + '<button class="tstar' + (isStar(l) ? ' on' : '') + '" data-star="' + id + '" title="' + (isStar(l) ? 'Braucht mich: aus Heute/Lage nehmen' : 'Braucht mich: in Heute und Lage unter „Braucht dich“') + '">' + (isStar(l) ? '★' : '☆') + '</button><div class="body">'
         + '<div class="t">' + t.num + '/ ' + esc(l.title) + '</div>' + (note ? '<div class="n">' + esc(note) + '</div>' : '')
         + (b ? '<div class="meta">' + b + '</div>' : '') + '</div></div>';
-    }).join('');
+  }
+  const hasDue = l => /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due'));
+  const isOver = l => l.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdy;
+  const html = panels.map((p, pi) => {
+    datedN += p.visible.filter(t => hasDue(t.line) && (showHold || t.line.status !== 'hold')).length;
+    if (onlyDated) p.visible.forEach(t => { if (hasDue(t.line) && matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait')) dated.push(Object.assign({ panel: p.name }, t)); });
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length; overN += p.visible.filter(t => isOver(t.line)).length;
+    if (q) hidN += p.visible.filter(t => matches(t.line, q)).length - vis.length;
+    if (onlyOver && !vis.length) return '';
+    const rows = vis.map(t => rowHtml(t)).join('');
     let ar = '';
     if (showArch) {
       const al = p.archived.filter(t => matches(t.line, q));
@@ -908,18 +916,24 @@ function render() {
       + '<button class="pm" title="Panel bearbeiten" data-pedit="' + esc(p.name) + '">⋯</button></div>'
       + rows + ar + '<div class="addrow" data-drop-end="' + esc(p.name) + '"><input placeholder="+ Task hinzufügen (Enter)" data-add="' + esc(p.name) + '"></div></div>';
   }).join('');
-  $('grid').innerHTML = html;
+  if (onlyDated) {
+    dated.sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : field(a.line, 'due') > field(b.line, 'due') ? 1 : a.idx - b.idx);
+    $('grid').innerHTML = '<div class="panel dated" style="--c:#64748b"><div class="head"><span class="name">Terminiert, früh fällig zuerst</span><span class="cnt">' + dated.length + '</span></div>'
+      + (dated.map(t => rowHtml(t, t.panel)).join('') || '<div class="foot">Keine Tasks mit Datum.</div>') + '</div>';
+  } else $('grid').innerHTML = html;
   $('btnArch').textContent = showArch ? 'Archiv ausblenden' : 'Archiv zeigen (' + arch + ')';
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
   $('btnOver').textContent = onlyOver ? 'Alle zeigen' : 'Überfällig (' + overN + ')'; $('btnOver').classList.toggle('on', onlyOver);
+  $('btnDated').textContent = onlyDated ? 'Alle zeigen' : 'Terminiert (' + datedN + ')'; $('btnDated').classList.toggle('on', onlyDated);
   $('btnWait').textContent = hideWait ? 'Wartet zeigen (' + waitN + ')' : 'Wartet ausblenden'; $('btnWait').classList.toggle('on', hideWait);
   $('foot').textContent = (hidN ? hidN + ' Treffer durch Filter ausgeblendet (Wartet/On-Hold/Überfällig) · ' : '') + total + ' offene Aufgaben' + (waitN ? ', ' + waitN + ' wartet' : '') + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
   if (onRender) onRender();
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
-$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) showArch = false; render(); };
+$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) { showArch = false; onlyDated = false; } render(); };
+$('btnDated').onclick = () => { onlyDated = !onlyDated; if (onlyDated) { showArch = false; onlyOver = false; } render(); };
 $('btnWait').onclick = () => { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
@@ -1301,7 +1315,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'd4eb20fcc1';
+  const BUILD = 'b6860e415c';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
