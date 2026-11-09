@@ -71,6 +71,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .et{ font-weight:700; font-size:13px; min-width:52px; display:flex; flex-direction:column; } .et small{ font-weight:500; color:var(--ink3); font-size:11.5px; }
 .eb{ display:flex; flex-direction:column; min-width:0; } .es{ font-size:13.5px; font-weight:500; } .el{ font-size:12px; color:var(--ink3); }
 .prow{ display:flex; align-items:center; gap:10px; padding:10px 16px; border-top:1px solid var(--line); cursor:pointer; }
+.prow.theme{ flex-wrap:wrap; align-items:flex-start; cursor:default; } .prow.theme .pt{ flex:1 1 100%; min-width:0; } .prow.theme .pt small{ display:block; color:var(--ink3); font-size:11.5px; } .prow.theme .tchips{ flex:1 1 100%; margin-top:2px; }
+.lsearch{ width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid var(--line); border-radius:8px; font:inherit; margin:0 0 10px; background:var(--card,#fff); color:inherit; } .lcount{ font-size:12px; color:var(--ink3); margin:-4px 0 10px; }
 .prow:hover{ background:var(--acc2); } .pn{ font-size:12px; color:var(--ink3); font-weight:700; min-width:28px; } .pt{ flex:1; font-size:13.5px; min-width:0; }
 .pt small{ display:block; font-size:11.5px; color:var(--ink3); }
 /* Mails */
@@ -100,7 +102,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .stzone{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted,#888); padding:4px 8px; margin:6px 0 2px; border-top:1px dashed var(--line); } .stzone span{ opacity:.7; } .stzone.drop{ background:var(--hotbg); color:var(--acc); outline:2px dashed var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .stzone{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted,#888); padding:4px 8px; margin:6px 0 2px; border-top:1px dashed var(--line); } .stzone span{ opacity:.7; } .stzone{ cursor:pointer; user-select:none; } .zgrp.col{ display:none; } .panel.pcol .pbody{ display:none; } .ptog{ background:none; border:0; color:inherit; cursor:pointer; padding:0 4px 0 0; font-size:13px; } .stzone.drop{ background:var(--hotbg); color:var(--acc); outline:2px dashed var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -193,8 +195,10 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <button id="btnHold" title="On-Hold-Tasks ein- oder ausblenden">On-Hold zeigen</button>
   <button id="btnWait" title="Wartende Tasks ein- oder ausblenden">Wartet ausblenden</button>
   <button id="btnOver" title="Nur aktive Tasks mit Fälligkeit vor heute">Überfällig</button>
+  <button id="btnSoon" title="Aktive Tasks, fällig heute bis in 7 Tagen (ohne Überfällige)">In 7 Tagen</button>
   <button id="btnDated" title="Alle Tasks mit Datum, früh fällig zuerst">Terminiert</button>
   <button id="btnUndated" title="Aktive Tasks ohne Frist, nach Thema (Panel)">Ohne Frist</button>
+  <button id="btnFold" title="Alle Panels ein- oder ausklappen">Alle einklappen</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -792,8 +796,15 @@ const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
-let onlyUndated = false;   // Filter „Ohne Frist“ (Chris 09.11.): aktive Tasks ohne Datum, nach Panel
+let onlyUndated = false;
+const zoneCol = new Set((() => { try { return JSON.parse(localStorage.getItem('tb-zone-col') || '[]'); } catch (e) { return []; } })());
+function zoneSet(key, col) { const z = [...document.querySelectorAll('.stzone[data-dropst]')].find(x => x.dataset.zpanel + '|' + x.dataset.dropst === key), g = [...document.querySelectorAll('.zgrp')].find(x => x.dataset.zg === key);
+  if (col) zoneCol.add(key); else zoneCol.delete(key); try { localStorage.setItem('tb-zone-col', JSON.stringify([...zoneCol])); } catch (e) { /* ohne Speicher */ }
+  if (key.endsWith('|*')) { const pe = [...document.querySelectorAll('#grid .panel')].find(x => x.dataset.panel === key.slice(0, -2)); if (pe) { pe.classList.toggle('pcol', col); const tb = pe.querySelector('.ptog'); if (tb) tb.textContent = col ? '▸' : '▾'; } return; }
+  if (z) { z.classList.toggle('col', col); z.firstChild && (z.firstChild.textContent = z.firstChild.textContent.replace(/^[▸▾] /, col ? '▸ ' : '▾ ')); } if (g) g.classList.toggle('col', col); }
+let zoneHover = null;   // Filter „Ohne Frist“ (Chris 09.11.): aktive Tasks ohne Datum, nach Panel
 let onlyDated = false;   // Filter „Terminiert“ (Chris 06.11.): alle Tasks mit Datum als eine Liste, früh fällig zuerst
+let onlySoon = false;   // Filter „In 7 Tagen“ (Chris 09.11.): gleiche Regel wie Kennzahl „fällig in 7 Tagen“
 let onlyOver = false;   // Filter „Überfällig“ (Chris 02.11.), gleiche Regel wie Kennzahl: aktiv und fällig vor heute
 let hideWait = false; try { hideWait = localStorage.getItem('tb-hide-wait') === '1'; } catch (e) { /* Standard: wartende sichtbar (Chris 29.10.) */ }
 const $ = id => document.getElementById(id);
@@ -901,18 +912,21 @@ function render() {
   }
   const hasDue = l => /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due'));
   const isOver = l => l.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdy;
-  let undN = 0;
+  const lim7 = new Date(Date.now() + 7 * 864e5).toLocaleDateString('sv-SE');
+  const isSoon = l => l.status === 'active' && hasDue(l) && field(l, 'due') >= tdy && field(l, 'due') <= lim7;
+  let undN = 0, soonN = 0;
   const html = panels.map((p, pi) => {
     datedN += p.visible.filter(t => hasDue(t.line) && (showHold || t.line.status !== 'hold')).length;
     if (onlyDated) p.visible.forEach(t => { if (hasDue(t.line) && matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait')) dated.push(Object.assign({ panel: p.name }, t)); });
-    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)) && (!onlyUndated || (t.line.status === 'active' && !hasDue(t.line))));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)) && (!onlySoon || isSoon(t.line)) && (!onlyUndated || (t.line.status === 'active' && !hasDue(t.line))));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
     total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length; overN += p.visible.filter(t => isOver(t.line)).length;
     if (q) hidN += p.visible.filter(t => matches(t.line, q)).length - vis.length;
-    undN += p.visible.filter(t => t.line.status === 'active' && !hasDue(t.line)).length;
-    if ((onlyOver || onlyUndated) && !vis.length) return '';
-    const zoned = !q && !onlyOver && !onlyUndated && !onlyDated;   // Status-Rubriken als Ablageflächen (Chris 09.11.): ziehen = Status wechseln
-    const zone = (st, lbl, n) => '<div class="stzone" data-dropst="' + st + '" data-zpanel="' + esc(p.name) + '">' + lbl + ' <span>' + n + '</span></div>';
-    const grp = st => vis.filter(t => t.line.status === st).map(t => rowHtml(t)).join('');
+    undN += p.visible.filter(t => t.line.status === 'active' && !hasDue(t.line)).length; soonN += p.visible.filter(t => isSoon(t.line)).length;
+    if ((onlyOver || onlyUndated || onlySoon) && !vis.length) return '';
+    const zoned = !q && !onlyOver && !onlyUndated && !onlyDated && !onlySoon;   // Status-Rubriken als Ablageflächen (Chris 09.11.): ziehen = Status wechseln
+    const zcol = st => zoneCol.has(p.name + '|' + st);   // Rubrik eingeklappt (Chris 09.11.), pro Panel gemerkt
+    const zone = (st, lbl, n) => '<div class="stzone' + (zcol(st) ? ' col' : '') + '" data-dropst="' + st + '" data-zpanel="' + esc(p.name) + '" title="Klicken: ein- oder ausklappen. Hierher ziehen: Status wechseln">' + (zcol(st) ? '▸ ' : '▾ ') + lbl + ' <span>' + n + '</span></div>';
+    const grp = st => '<div class="zgrp' + (zcol(st) ? ' col' : '') + '" data-zg="' + esc(p.name + '|' + st) + '">' + vis.filter(t => t.line.status === st).map(t => rowHtml(t)).join('') + '</div>';
     const nS = st => vis.filter(t => t.line.status === st).length;
     const rows = !zoned ? vis.map(t => rowHtml(t)).join('') : zone('active', 'Aktiv', nS('active')) + grp('active') + (hideWait ? '' : zone('wait', 'Wartet', nS('wait')) + grp('wait')) + (showHold ? zone('hold', 'On-Hold', nS('hold')) + grp('hold') : '');
     let ar = '';
@@ -927,10 +941,11 @@ function render() {
       }).join('');
     }
     if (q && !vis.length && !ar) return '';
-    return '<div class="panel" style="--c:' + esc(p.color) + '" data-panel="' + esc(p.name) + '">'
-      + '<div class="head" draggable="true" data-ph="' + esc(p.name) + '"><span class="name">' + esc(p.name) + '</span><span class="cnt">' + (showHold ? p.visible.length : p.visible.filter(t => t.line.status !== 'hold').length) + '</span>'
+    const pcol = zoned && zoneCol.has(p.name + '|*');   // ganzes Panel eingeklappt (Chris 09.11.)
+    return '<div class="panel' + (pcol ? ' pcol' : '') + '" style="--c:' + esc(p.color) + '" data-panel="' + esc(p.name) + '">'
+      + '<div class="head" draggable="true" data-ph="' + esc(p.name) + '"><button class="ptog" data-ptog="' + esc(p.name) + '" title="Panel ein- oder ausklappen">' + (pcol ? '▸' : '▾') + '</button><span class="name">' + esc(p.name) + '</span><span class="cnt">' + (showHold ? p.visible.length : p.visible.filter(t => t.line.status !== 'hold').length) + '</span>'
       + '<button class="pm" title="Panel bearbeiten" data-pedit="' + esc(p.name) + '">⋯</button></div>'
-      + rows + ar + '<div class="addrow" data-drop-end="' + esc(p.name) + '"><input placeholder="+ Task hinzufügen (Enter)" data-add="' + esc(p.name) + '"></div></div>';
+      + '<div class="pbody">' + rows + ar + '<div class="addrow" data-drop-end="' + esc(p.name) + '"><input placeholder="+ Task hinzufügen (Enter)" data-add="' + esc(p.name) + '"></div></div></div>';
   }).join('');
   if (onlyDated) {
     dated.sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : field(a.line, 'due') > field(b.line, 'due') ? 1 : a.idx - b.idx);
@@ -941,6 +956,8 @@ function render() {
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
   $('btnOver').textContent = onlyOver ? 'Alle zeigen' : 'Überfällig (' + overN + ')'; $('btnOver').classList.toggle('on', onlyOver);
+  $('btnFold').textContent = C.view(model).every(p => zoneCol.has(p.name + '|*')) ? 'Alle ausklappen' : 'Alle einklappen';
+  $('btnSoon').textContent = onlySoon ? 'Alle zeigen' : 'In 7 Tagen (' + soonN + ')'; $('btnSoon').classList.toggle('on', onlySoon);
   $('btnUndated').textContent = onlyUndated ? 'Alle zeigen' : 'Ohne Frist (' + undN + ')'; $('btnUndated').classList.toggle('on', onlyUndated);
   $('btnDated').textContent = onlyDated ? 'Alle zeigen' : 'Terminiert (' + datedN + ')'; $('btnDated').classList.toggle('on', onlyDated);
   $('btnWait').textContent = hideWait ? 'Wartet zeigen (' + waitN + ')' : 'Wartet ausblenden'; $('btnWait').classList.toggle('on', hideWait);
@@ -949,9 +966,11 @@ function render() {
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
-$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) { showArch = false; onlyDated = false; onlyUndated = false; } render(); };
-$('btnUndated').onclick = () => { onlyUndated = !onlyUndated; if (onlyUndated) { showArch = false; onlyDated = false; onlyOver = false; } render(); };
-$('btnDated').onclick = () => { onlyDated = !onlyDated; if (onlyDated) { showArch = false; onlyOver = false; onlyUndated = false; } render(); };
+$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) { showArch = false; onlyDated = false; onlyUndated = false; onlySoon = false; } render(); };
+$('btnFold').onclick = () => { const ps = C.view(model).map(p => p.name); const allCol = ps.every(n => zoneCol.has(n + '|*')); ps.forEach(n => { if (allCol) zoneCol.delete(n + '|*'); else zoneCol.add(n + '|*'); }); try { localStorage.setItem('tb-zone-col', JSON.stringify([...zoneCol])); } catch (e) { /* ohne Speicher */ } render(); };
+$('btnUndated').onclick = () => { onlyUndated = !onlyUndated; if (onlyUndated) { showArch = false; onlyDated = false; onlyOver = false; onlySoon = false; } render(); };
+$('btnDated').onclick = () => { onlyDated = !onlyDated; if (onlyDated) { showArch = false; onlyOver = false; onlyUndated = false; onlySoon = false; } render(); };
+$('btnSoon').onclick = () => { onlySoon = !onlySoon; if (onlySoon) { showArch = false; onlyDated = false; onlyOver = false; onlyUndated = false; } render(); };
 $('btnWait').onclick = () => { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
@@ -1109,9 +1128,11 @@ $('grid').addEventListener('dragend', () => { clearMarks(); drag = null; });
 $('grid').addEventListener('dragover', e => {
   if (!drag) return; e.preventDefault();
   document.querySelectorAll('.drop,.dropP').forEach(x => x.classList.remove('drop', 'dropP'));
-  if (drag.kind === 'task') { const z = e.target.closest('[data-dropst]'); if (z) { z.classList.add('drop'); return; } const t = e.target.closest('.task[data-k]'); if (t && t.dataset.k !== drag.id) t.classList.add('drop'); else { const p = e.target.closest('.panel'); if (p) p.classList.add('dropP'); } }
+  if (drag.kind === 'task') { const pc = e.target.closest('.panel.pcol'); if (pc) { const pk = pc.dataset.panel + '|*'; if (!zoneHover || zoneHover.k !== pk) { if (zoneHover) clearTimeout(zoneHover.t); zoneHover = { k: pk, t: setTimeout(() => zoneSet(pk, false), 450) }; } }
+    const z = e.target.closest('[data-dropst]'); if (z) { z.classList.add('drop'); const zk = z.dataset.zpanel + '|' + z.dataset.dropst; if (z.classList.contains('col') && (!zoneHover || zoneHover.k !== zk)) { if (zoneHover) clearTimeout(zoneHover.t); zoneHover = { k: zk, t: setTimeout(() => zoneSet(zk, false), 450) }; } return; }   /* eingeklappte Rubrik klappt beim Darüberziehen auf */ const t = e.target.closest('.task[data-k]'); if (t && t.dataset.k !== drag.id) t.classList.add('drop'); else { const p = e.target.closest('.panel'); if (p) p.classList.add('dropP'); } }
   else { const p = e.target.closest('.panel'); if (p && p.dataset.panel !== drag.name) p.classList.add('dropP'); }
 });
+$('grid').addEventListener('click', e => { const pt = e.target.closest('[data-ptog]'); if (pt) { e.preventDefault(); e.stopPropagation(); const pe = pt.closest('.panel'); zoneSet(pt.dataset.ptog + '|*', !pe.classList.contains('pcol')); return; } const z = e.target.closest('.stzone[data-dropst]'); if (!z || drag) return; zoneSet(z.dataset.zpanel + '|' + z.dataset.dropst, !z.classList.contains('col')); });
 $('grid').addEventListener('drop', e => {
   if (!drag) return; e.preventDefault(); const d = drag; drag = null; clearMarks();
   if (d.kind === 'task') {
@@ -1340,7 +1361,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '7aa9886f63';
+  const BUILD = 'f4fe9749e7';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -2142,17 +2163,25 @@ if (S.cockpit) {
     $('v-portfolio').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
   }
   function paintLinks() {
-    const th = st.themen ? (st.themen.themes || []).map(t => '<div class="prow"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + ((t.sessions || []).length ? ' · Sitzungen: ' + esc(t.sessions.join(', ')) : '') + '</small></span>'
-      + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '')
-      + (t.sessions || []).map(n => { const sid = sessId(n); return sid ? chatChip(t.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung öffnen')
-          : chatChip(t.id, n, claudeLink('project/' + st.themen.buddyProject), 'Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste'); }).join('')
-      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Neuer Chat zum Thema ↗</a></div>').join('') : '';
+    const chipOf = (t, n) => { const sid = sessId(n); return sid ? chatChip(t.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung öffnen') : chatChip(t.id, n, claudeLink('project/' + st.themen.buddyProject), 'Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste'); };
+    const th = st.themen ? (st.themen.themes || []).map(t => { const ss = (t.sessions || []).slice().reverse();   // neueste zuerst; Layout-Fix 09.11.: Titel oben, Chips darunter umbrechend
+      return '<div class="prow theme" data-ftext="' + esc((t.title + ' ' + (t.folder || '') + ' ' + (t.kw || []).join(' ') + ' ' + ss.join(' ')).toLowerCase()) + '"><span class="pt"><b>' + esc(t.title) + '</b><small>' + esc(t.folder || '') + (ss.length ? (t.folder ? ' · ' : '') + ss.length + ' Sitzung' + (ss.length > 1 ? 'en' : '') : '') + '</small></span>'
+      + '<div class="tchips">' + (t.chat ? '<a class="chip chat" href="' + esc(claudeLink('chat/' + t.chat)) + '">Chat ↗</a>' : '') + ss.slice(0, 3).map(n => chipOf(t, n)).join('')
+      + '<a class="chip" href="' + esc(buddyUrl('Buddy, Thema „' + t.title + '“ (Projektordner ' + (t.folder || '-') + '). Wo stehen wir, was steht an?')) + '" title="Neuer Chat mit Buddy zu diesem Thema">Neuer Chat zum Thema ↗</a>'
+      + (ss.length > 3 ? '<details class="morechats"><summary>+' + (ss.length - 3) + ' weitere Sitzungen</summary>' + ss.slice(3).map(n => chipOf(t, n)).join('') + '</details>' : '') + '</div></div>'; }).join('') : '';
     const themenCard = th ? '<section class="card" style="margin-bottom:14px"><div class="ch"><h2>Themen</h2><span class="cs">Register: knowledge/cockpit/themen.json · ordnet Lage, Mails und Tasks zu</span></div>' + th + '</section>' : '';
-    $('v-links').innerHTML = themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
+    $('v-links').innerHTML = '<div class="mfilter"><input type="search" id="lSearch" placeholder="Volltextsuche in Themen, Sitzungen und Links" value="' + esc(st.lq || '') + '" style="flex:1;min-width:220px"> <span class="cs" id="lCount"></span></div>' + themenCard + '<section class="card"><div class="ch"><h2>Projekte, Chats, Dokumente</h2><span class="cs">Liste: knowledge/cockpit/links.md, pflegt Buddy</span>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, nimm diesen Link in die Cockpit-Linkliste auf: ')) + '" target="_blank" rel="noopener">Link aufnehmen lassen</a></div>'
       + (st.err.links ? '<div class="errbox">' + esc(st.err.links) + '</div>' : (st.links ? '<div class="md links">' + md(st.links.replace(/^#\s.*\n/, '')) + '</div>' : '<div class="empty">Noch keine Linkliste.</div>')) + '</section>';
   }
-  function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); paintLinks(); }
+  function filterLinks() {   // Volltextsuche Links (Chris 09.11.): alle Wörter müssen vorkommen
+    const q = (st.lq || '').toLowerCase().split(/\s+/).filter(Boolean); let n = 0, tot = 0;
+    document.querySelectorAll('#v-links .prow.theme, #v-links .md.links li').forEach(el => { tot++; const txt = (el.dataset.ftext || '') + ' ' + el.textContent.toLowerCase() + ' ' + [...el.querySelectorAll('a')].map(a => a.href.toLowerCase()).join(' '); const hit = q.every(w => txt.includes(w)); el.style.display = hit ? '' : 'none'; if (hit) n++; });
+    document.querySelectorAll('#v-links .md.links h3, #v-links .md.links h4').forEach(h => { let x = h.nextElementSibling, any = false; while (x && !/^H[1-6]$/.test(x.tagName)) { if (x.querySelector && [...x.querySelectorAll('li')].some(li => li.style.display !== 'none')) any = true; x = x.nextElementSibling; } h.style.display = !q.length || any ? '' : 'none'; });
+    const c = $('lCount'); if (c) c.textContent = q.length ? n + ' Treffer' : '';
+  }
+  document.addEventListener('input', e => { if (e.target && e.target.id === 'lSearch') { st.lq = e.target.value; filterLinks(); } });
+  function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); if (!(document.activeElement && document.activeElement.id === 'lSearch')) paintLinks(); filterLinks(); }
 
   // ---- Lage-Punkt -> zugehoerige Mails (Buddy verknuepft in mail-triage.json per "brief": "JJJJ-MM-TT#N") ----
   const bkey = n => (st.useGh ? 'lage' : st.briefDate) + '#' + n;   // Lage aus dem Lauf: lage#N, Morgen-Briefing: JJJJ-MM-TT#N
