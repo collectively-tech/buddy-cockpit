@@ -100,7 +100,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ff0956e18b';
+  const BUILD = '883b84fa5d';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1545,7 +1545,7 @@ if (S.cockpit) {
           + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
           + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>'
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
-            : tr.draftText && S.createReplyDraft ? '<details class="drf"><summary>Antwort-Vorschlag</summary><div class="drt">' + esc(tr.draftText) + '</div><button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span></details>' : '')
+            : tr.draftText && S.createReplyDraft ? drBox(m, tr.draftText) : '')
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
           + (mailDone(m) ? '' : '<button class="mstar' + (mailStar(m) ? ' on' : '') + '" data-mstar="' + esc(m.id) + '">' + (mailStar(m) ? '★ Braucht mich' : '☆ Braucht mich') + '</button>')
           + attBlock(m)
@@ -1750,6 +1750,11 @@ if (S.cockpit) {
   const flink = m => { const d = st.dec['fwd:' + m.internetMessageId]; return d && d.link; };
   const fwdBlock = (m, tr) => !tr.forwardTo ? '' : flink(m) ? '<a class="btn" href="' + esc(flink(m)) + '" target="outlook" rel="noopener">Weiterleitung öffnen ↗</a>'
     : S.createForwardDraft ? '<details class="drf"><summary>Weiterleiten an ' + esc(tr.forwardTo) + '</summary><div class="drt">' + esc(tr.forwardText || '') + '</div><button class="primary" data-mfwd="' + esc(m.id) + '">Weiterleitung als Entwurf anlegen</button> <span class="drn">mit Anhang, wird nur angelegt, nicht gesendet</span></details>' : '';
+  // Buddys Antwort-Vorschlag direkt im Cockpit ändern, dann als Entwurf in Outlook (Chris 09.11.); Änderungen überleben das Neuladen
+  const drEdit = {};
+  const drBox = (m, txt) => '<details class="drf" open><summary>Antwort-Vorschlag von Buddy (hier änderbar)</summary><textarea class="drt drta" data-drtxt="' + esc(m.id) + '" rows="' + Math.min(14, Math.max(4, String(drEdit[m.id] != null ? drEdit[m.id] : txt).split('\n').length + 1)) + '">' + esc(drEdit[m.id] != null ? drEdit[m.id] : txt) + '</textarea>'
+    + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Ok, als Entwurf in Outlook</button> <span class="drn">liegt dann in Outlook bereit, du sendest selbst</span>' : '') + '</details>';
+  document.addEventListener('input', e => { const t = e.target; if (t && t.dataset && t.dataset.drtxt) drEdit[t.dataset.drtxt] = t.value; });
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
   // ---- Buddy schlägt vor (Chris 09.10.): pro Mail ein fertiger nächster Schritt, 1 Klick übernimmt, „Nein“ wird gelernt.
   // Quellen: Buddys Routine (triage.next) + gelernte Ablage (learnPick) + Einordnung. Nichts passiert ohne Klick, nie senden.
@@ -1758,6 +1763,13 @@ if (S.cockpit) {
   const okFolder = f => f && !SYS_LEAF.test(f.name.split(' / ').pop().trim());   // nie in Gesendet/Entwürfe/Papierkorb ablegen
   function folderByName(name) { if (!name || !st.folders) return null; const n = String(name).toLowerCase().trim(); if (SYS_LEAF.test(n)) return null;
     return st.folders.find(f => f.name.toLowerCase() === n) || st.folders.find(f => f.name.split(' / ').pop().toLowerCase() === n) || null; }
+  const hintOf = {}, hintAsked = new Set(); let hintBusy = false;
+  async function fillHints() {   // für Vorschläge ohne Ordner: Thread/Absender/Betreff fragen (folderHints), dann neu zeichnen
+    if (hintBusy || !S.moveMessage) return; hintBusy = true; let got = 0;
+    try { for (const m of st.mails) { if (hintAsked.has(m.id)) continue; const p = proposal(m); if (!p || p.folder || p.a.reply || p.a.task || mailCat(m) === 'needs') continue;
+      hintAsked.add(m.id); const h = await folderHints(m).catch(() => []); const f = (h || []).find(okFolder); if (f) { hintOf[m.id] = f; got++; } } }
+    finally { hintBusy = false; } if (got) paintMails();
+  }
   function proposal(m) {
     const d = st.dec['next:' + m.internetMessageId]; if (d && (d.status === 'rejected' || d.status === 'accepted')) return null;
     const tr = triageOf(m), cat = mailCat(m), lp = learnPick(m), a = {}; let why = '';
@@ -1772,6 +1784,7 @@ if (S.cockpit) {
       if (cat === 'needs' && tr.draftText && !tr.draft && !dlink(m) && !tr.draftHidden) a.reply = true;
       why = a.file ? 'gelernt: ' + lp.sure + ' % dieser Absender/Threads liegen in „' + lp.f.name + '“' : cat === 'info' ? 'nur Info' : '';
     }
+    let fromHint = false; if (!a.file && !a.reply && !a.task && cat !== 'needs' && hintOf[m.id]) { a.file = hintOf[m.id]; fromHint = true; why = (why ? why + '; ' : '') + 'Ordner aus Thread/Absender, bitte prüfen'; }   // Chris 09.11.: Vorschläge ohne Ordner waren nicht übernehmbar
     if (a.reply && (tr.draft || dlink(m) || !tr.draftText || !S.createReplyDraft)) delete a.reply;
     if (a.file && !m.isRead && !a.reply && !a.task) a.read = true;   // wer ablegt, hat sie gelesen
     if (a.read && m.isRead) delete a.read;
@@ -1779,7 +1792,7 @@ if (S.cockpit) {
     if (a.done && mailDone(m)) delete a.done;
     const keys = Object.keys(a); if (!keys.length) return null;
     const label = keys.filter(k => k !== 'file').map(k => NX_LBL[k]).join(' + ') + (a.file ? (keys.length > 1 ? ' + ' : '') + 'Ablegen' : '');
-    return { a, keys, label, why, folder: a.file || null, safe: keys.every(k => k === 'read' || k === 'file' || k === 'done') };
+    return { a, keys, label, why, folder: a.file || null, safe: !fromHint && keys.every(k => k === 'read' || k === 'file' || k === 'done') };   // geschätzter Ordner nie in die Sammel-Übernahme
   }
   // Ordner direkt im Vorschlag wählbar: vorbelegt mit dem gelernten/Buddys Ordner, änderbar, „nicht ablegen“ möglich (Chris 10.10.)
   // Ordner per Textsuche finden (Chris 19.10.): Eintrag „Ordner suchen …“ in jeder Ordnerauswahl öffnet den Suchdialog
@@ -1860,8 +1873,7 @@ if (S.cockpit) {
       + nxHtml(m)
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
-      + (tr.draftText && !tr.draft && !dlink(m) ? '<details class="drf"><summary>Antwort-Vorschlag von Buddy</summary><div class="drt">' + esc(tr.draftText) + '</div>'
-        + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Als Entwurf in Outlook anlegen</button> <span class="drn">wird nur angelegt, nicht gesendet</span>' : '') + '</details>' : '')
+      + (tr.draftText && !tr.draft && !dlink(m) ? drBox(m, tr.draftText) : '')
       + (tr.forwardTo ? '<div class="ma">' + fwdBlock(m, tr) + '</div>' : '')
       + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.', true)
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
@@ -1878,6 +1890,7 @@ if (S.cockpit) {
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
   }
   function paintMails() {
+    setTimeout(fillHints, 0);
     if (st.err.mails) { $('v-mails').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '</div>'; return; }
     if (st.focus) {
       const fm = st.mails.filter(m => st.focus.ids.has(m.id));
@@ -2212,13 +2225,14 @@ if (S.cockpit) {
       return; }
     const md = e.target.closest('[data-mdraft]'); if (!md) return;
     const m = anyMail(md.dataset.mdraft); if (!m) return;
-    const tr = triageOf(m); if (!tr.draftText) return;
+    const tr = triageOf(m); const ta = md.closest('.drf') && md.closest('.drf').querySelector('textarea[data-drtxt]');
+    const text = ((ta ? ta.value : drEdit[m.id] != null ? drEdit[m.id] : tr.draftText) || '').trim(); if (!text) { toast('Antwort ist leer.'); return; }
     md.disabled = true; md.textContent = 'Lege Entwurf an …';
     try {
-      const d = await S.createReplyDraft(m.id, tr.draftText);
+      const d = await S.createReplyDraft(m.id, text); delete drEdit[m.id];
       await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
       toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails(); paintHeute();
-    } catch (err) { md.disabled = false; md.textContent = 'Als Entwurf in Outlook anlegen'; setStatus(err.message, 'err'); }
+    } catch (err) { md.disabled = false; md.textContent = 'Ok, als Entwurf in Outlook'; setStatus(err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
     if (e.target.closest('#btnGhTok')) { const v = ($('ghTokIn').value || '').trim(); if (!v) return; lsSet('cockpit-gh-token', v);
