@@ -51,7 +51,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .md.links a{ font-weight:600; }
 .md li.bi{ cursor:pointer; border-radius:8px; padding:3px 6px; margin-left:-6px; } .md li.bi:hover{ background:var(--acc2); }
 .md li.bi::after{ content:" · Mails dazu ↗"; color:var(--acc); font-weight:600; font-size:12px; } .md li.bi:has(.lacts)::after{ content:none; } .md li.bi.nomail::after{ content:none; }
-.odbadge{ display:inline-block; background:var(--hotbg); color:var(--hot); border-radius:4px; padding:0 6px; font-size:12px; font-weight:700; margin-right:4px; } .md li.overdue{ border-left:3px solid var(--hot); padding-left:6px; } .md li.overdue-x{ list-style:none; } .md li.overdue-x::after{ content:none; }
+.odbadge{ display:inline-block; background:var(--hotbg); color:var(--hot); border-radius:4px; padding:0 6px; font-size:12px; font-weight:700; margin-right:4px; } .md li.overdue{ border-left:3px solid var(--hot); padding-left:6px; } .md li.overdue-x{ list-style:none; } .md li[data-topen]{ cursor:pointer; border-radius:6px; } .md li[data-topen]:hover{ background:var(--line); } .md li[data-topen] > b, .md li[data-topen] > strong{ text-decoration:underline dotted; text-underline-offset:3px; } .md li.overdue-x::after{ content:none; }
 .tchips{ display:flex; gap:6px; flex-wrap:wrap; align-items:center; margin-top:6px; font-size:11.5px; color:var(--ink2); } .tchips .tth{ margin-right:2px; }
 .md li.bi.done{ color:var(--ink3); opacity:.75; }
 .morechats{ display:inline-block; margin:2px 4px; } .morechats > summary{ cursor:pointer; font-size:12px; color:var(--ink3); list-style:none; } .morechats > summary::before{ content:'▸ '; } .morechats[open] > summary::before{ content:'▾ '; } .morechats[open]{ display:block; }
@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '1c88cd4f0a';
+  const BUILD = '9dcf3b1bf6';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1585,10 +1585,10 @@ if (S.cockpit) {
     const ts = C.view(model).flatMap(p => p.visible).filter(t => isOver(t.line)).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1);
     [...ts].reverse().forEach(t => { const due = field(t.line, 'due'); const badge = '<span class="odbadge">Überfällig seit ' + esc(fmtDue(due)) + '</span> ';
       const hit = lis.find(li => !li.dataset.struck && !doneKey(li) && (taskForPoint(ptTitle(li)) || {}).i === t.idx);
-      if (hit) { hit.classList.add('overdue'); if (!hit.querySelector('.odbadge')) hit.insertAdjacentHTML('afterbegin', badge); ol.insertBefore(hit, ol.firstChild); return; }
+      if (hit) { const hk = 'k' + t.idx; keys.set(hk, C.keyOf(model, t.idx)); hit.dataset.topen = hk; hit.title = 'Klicken: Task öffnen und bearbeiten'; hit.classList.add('overdue'); if (!hit.querySelector('.odbadge')) hit.insertAdjacentHTML('afterbegin', badge); ol.insertBefore(hit, ol.firstChild); return; }
       document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { if ((taskForPoint(ptTitle(li)) || {}).i === t.idx) { li.style.display = 'none'; li.dataset.odmoved = '1'; } });
       const kid = 'k' + t.idx; keys.set(kid, C.keyOf(model, t.idx)); const wo = field(t.line, 'wait_on');
-      ol.insertAdjacentHTML('afterbegin', '<li class="overdue overdue-x" data-od="' + t.idx + '">' + badge + '<b>' + esc(t.line.title.slice(0, 120)) + '.</b> Task ' + t.num + '/, ' + esc(ST_LBL[t.line.status] || t.line.status) + (wo ? ', wartet auf ' + esc(wo) : '') + '. Bleibt hier, bis erledigt oder neue Frist. '
+      ol.insertAdjacentHTML('afterbegin', '<li class="overdue overdue-x" data-od="' + t.idx + '" data-topen="' + kid + '" title="Klicken: Task öffnen und bearbeiten">' + badge + '<b>' + esc(t.line.title.slice(0, 120)) + '.</b> Task ' + t.num + '/, ' + esc(ST_LBL[t.line.status] || t.line.status) + (wo ? ', wartet auf ' + esc(wo) : '') + '. Bleibt hier, bis erledigt oder neue Frist. '
         + '<a class="chip" data-odpush="' + kid + '" data-days="7" title="Frist auf ' + esc(fmtDue(plusDays(7))) + ' setzen">Frist +7 Tage</a> <a class="chip" data-open="' + kid + '" title="Task öffnen, Frist frei setzen">Andere Frist</a> <a class="chip" data-oddone="' + kid + '" data-ptitle="' + esc(t.line.title.slice(0, 80)) + '">Task erledigt</a></li>'); });
   }
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-odpush],[data-oddone]'); if (!b) return; e.preventDefault(); e.stopPropagation();
@@ -1642,7 +1642,8 @@ if (S.cockpit) {
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || own.split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim().slice(0, 120); if (!title) return;
       const key = 'lage:' + title.toLowerCase().replace(/\s+/g, ' '); const d = st.dec[key];
       if (taskForPoint(title) && !(d && d.status === 'done')) {   // mit Board-Task: nur aus der Lage nehmen, Task bleibt wie er ist (Chris 06.11.)
-        const tp = taskForPoint(title); if (isOver(tp.l)) { const kid = 'k' + tp.i; keys.set(kid, C.keyOf(model, tp.i)); const h3 = '<a class="chip" data-odpush="' + kid + '" data-days="7">Frist +7 Tage</a> <a class="chip" data-open="' + kid + '">Andere Frist</a>'; const tc3 = li.querySelector('.tchips'); if (tc3) tc3.insertAdjacentHTML('beforeend', h3); else li.insertAdjacentHTML('beforeend', ' ' + h3); return; }   // überfällig: nicht wegklicken, nur Frist oder erledigt
+        const tp = taskForPoint(title); { const tk = 'k' + tp.i; keys.set(tk, C.keyOf(model, tp.i)); li.dataset.topen = tk; li.title = 'Klicken: Task öffnen und bearbeiten'; }
+        if (isOver(tp.l)) { const kid = 'k' + tp.i; keys.set(kid, C.keyOf(model, tp.i)); const h3 = '<a class="chip" data-odpush="' + kid + '" data-days="7">Frist +7 Tage</a> <a class="chip" data-open="' + kid + '">Andere Frist</a>'; const tc3 = li.querySelector('.tchips'); if (tc3) tc3.insertAdjacentHTML('beforeend', h3); else li.insertAdjacentHTML('beforeend', ' ' + h3); return; }   // überfällig: nicht wegklicken, nur Frist oder erledigt
         const h2 = '<a class="chip" data-ptdone="' + esc(key) + '" data-keepmails="1" data-ptitle="' + esc(title) + '" title="Punkt aus der Lage nehmen, Board-Task und Mails bleiben unverändert. Buddy bringt ihn nicht wieder">Aus Lage nehmen</a>';
         const tc2 = li.querySelector('.tchips'); if (tc2) tc2.insertAdjacentHTML('beforeend', h2); else li.insertAdjacentHTML('beforeend', ' ' + h2); return; }
       const done = d && d.status === 'done' && Date.parse(d.at) >= lageAt;
@@ -2380,6 +2381,7 @@ if (S.cockpit) {
       openNewTask({ title: m.subject || 'Mail', link: m.webLink, note: 'Mail von ' + fromOf(m) + ', ' + new Date(m.receivedDateTime).toLocaleDateString('de-CH') + '. ' + (m.bodyPreview || '').slice(0, 300) });
       return; }
     const ma = e.target.closest('[data-mattach]'); if (ma) { const m = anyMail(ma.dataset.mattach); if (m) attachDialog(m); return; }
+    const to = e.target.closest('[data-topen]'); if (to && !e.target.closest('a, button, details, .lacts, .chip, input, select, textarea') && keys.get(to.dataset.topen)) { openTask(to.dataset.topen); return; }   // Lage-Punkt mit Board-Task: ganzen Task öffnen und bearbeiten (Chris 09.11.)
     const bi = e.target.closest('[data-bi]'); if (bi && !e.target.closest('a, button, details, .lacts')) { jumpToBrief(bi.dataset.bi); return; }
     const po = e.target.closest('[data-open]'); if (po && !e.target.closest('#grid')) { openTask(po.dataset.open); }
   });
