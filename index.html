@@ -100,7 +100,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '569b8cb4e9';
+  const BUILD = 'e67da0c31f';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1445,7 +1445,32 @@ if (S.cockpit) {
     return C.view(model).flatMap(p => p.visible).filter(t => linksOf(t.line).includes(m.webLink));
   }
   const mailDone = m => { const d = st.dec['mail:' + m.internetMessageId]; return !!d && d.status === 'done'; };
-  const mailStar = m => { const d = st.dec['star:' + m.internetMessageId]; return !!d && d.status === 'on'; };   // „Braucht mich“ (Chris 04.11.)
+  const mailStar = m => { const d = st.dec['star:' + m.internetMessageId]; return !!d && d.status === 'on'; };
+  // „Wartet auf Antwort“ (Chris 09.11.): ohne Task, Mail darf abgelegt sein; nach 14 Tagen unter „Braucht dich“, dann +7 Tage
+  const isoPlus = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toLocaleDateString('sv-SE'); };
+  const waitOf = m => { const d = st.dec['wait:' + m.internetMessageId]; return d && d.status === 'open' ? d : null; };
+  const waitsOpen = () => Object.entries(st.dec).filter(([k, v]) => k.startsWith('wait:') && v && v.status === 'open').map(([k, v]) => Object.assign({ imid: k.slice(5) }, v));
+  const waitReply = w => st.mails.find(m => w.conv && m.conversationId === w.conv && m.internetMessageId !== w.imid && Date.parse(m.receivedDateTime) > Date.parse(w.at) && !/chris\.peter@bluehorizon\.com/i.test((m.from && m.from.emailAddress && m.from.emailAddress.address) || ''));
+  const waitChips = w => { const rep = waitReply(w);
+    return (rep ? '<a class="chip okchip" href="' + esc(rep.webLink) + '" target="outlook" rel="noopener">Antwort da ↗</a> ' : '')
+      + (w.link ? '<a class="chip" href="' + esc(w.link) + '" target="outlook" rel="noopener">Mail ↗</a> ' : '')
+      + (w.mid && S.createReplyDraft ? '<a class="chip" data-wnudge="' + esc(w.imid) + '" title="Antwort an den Absender als Entwurf in Outlook öffnen">Nachfassen ↗</a> ' : '')
+      + '<a class="chip" data-wpush="' + esc(w.imid) + '" title="Wartet weiter, neue Frist in 7 Tagen">+7 Tage</a> <a class="chip" data-wdone="' + esc(w.imid) + '" title="Antwort da oder erledigt: nicht mehr verfolgen">Auflösen ✓</a>'; };
+  function waitHtml() { const ws = waitsOpen(); if (!ws.length) return '';
+    ws.sort((a, b) => (a.due || '') < (b.due || '') ? -1 : 1); const td = new Date().toLocaleDateString('sv-SE');
+    return '<details class="mgroup g-wait" open data-g="wait"><summary><span class="gt">⏳ Wartet auf Antwort</span><span class="cnt2">' + ws.length + '</span><span class="cs">ohne Task; nach Frist unter „Braucht dich“</span></summary>'
+      + ws.map(w => { const over = w.due && w.due < td, rep = waitReply(w);
+        return '<div class="mail wait' + (over ? ' over' : '') + '" data-wimid="' + esc(w.imid) + '"><div class="mf">' + esc(w.from || '') + ' · seit ' + esc(new Date(w.at).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })) + '</div><div class="ms">' + esc(w.subject || '(ohne Betreff)') + ' <span class="' + (over ? 'due over' : 'due') + '">' + (rep ? 'Antwort da' : (over ? 'überfällig seit ' : 'Frist ') + esc(fmtDue(w.due || ''))) + '</span></div><div class="ma">' + waitChips(w) + '</div></div>'; }).join('') + '</details>'; }
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-mwait],[data-wpush],[data-wdone],[data-wnudge]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    if (b.dataset.mwait) { const m = anyMail(b.dataset.mwait); if (!m) return;
+      await decide('wait:' + m.internetMessageId, 'open', { subject: (m.subject || '').slice(0, 140), from: fromOf(m), conv: m.conversationId || '', link: m.webLink || '', mid: m.id, due: isoPlus(14), since: new Date().toISOString() });
+      st.dec['wait:' + m.internetMessageId].at = new Date().toISOString(); toast('Wartet auf Antwort bis ' + fmtDue(isoPlus(14)) + '. Du kannst die Mail jetzt ablegen.'); }
+    else if (b.dataset.wpush) { const w = st.dec['wait:' + b.dataset.wpush]; await decide('wait:' + b.dataset.wpush, 'open', Object.assign({}, w, { due: isoPlus(7), pushed: (w.pushed || 0) + 1 })); st.dec['wait:' + b.dataset.wpush].at = w.at; toast('Wartet weiter bis ' + fmtDue(isoPlus(7)) + '.'); }
+    else if (b.dataset.wdone) { const w = st.dec['wait:' + b.dataset.wdone]; await decide('wait:' + b.dataset.wdone, 'resolved', Object.assign({}, w, { status: 'resolved', resolved: new Date().toISOString() })); toast('Aufgelöst.'); }
+    else if (b.dataset.wnudge) { const w = st.dec['wait:' + b.dataset.wnudge]; if (!w || !w.mid) return; const win = window.open('', 'outlook');
+      try { const d = await S.createReplyDraft(w.mid, ''); if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook'); toast('Nachfassen: Entwurf ist in Outlook offen.'); }
+      catch (err) { if (win) win.close(); setStatus('Nachfassen ging nicht (Mail verschoben?): ' + err.message, 'err'); if (w.link) window.open(w.link, 'outlook'); } return; }
+    paintMails(); paintHeute(); }, true);   // „Braucht mich“ (Chris 04.11.)
   function mailCat(m) {
     if (mailDone(m)) return 'done';
     if (mailStar(m)) return 'needs';
@@ -1572,13 +1597,19 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addStarred(); addOverdue(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints();
+    addStarred(); addOverdue(); addWaits(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints();
   }
   // Überfällig bleibt oben (Chris 06.11., nach McAulays „stale experiments“): Task mit abgelaufener Frist steht zuoberst unter „Braucht dich“, bis erledigt oder neue Frist
   const tdyS = () => new Date().toLocaleDateString('sv-SE');
   const isOver = l => !!l && !!l.status && l.status !== 'done' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdyS();
   const plusDays = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toLocaleDateString('sv-SE'); };
   const ptTitle = li => { const b = li.querySelector(':scope > b, :scope > strong'); return ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim(); };
+  function addWaits() {   // „Wartet auf Antwort“: Frist vorbei oder Antwort da = unter „Braucht dich“ (Chris 09.11.)
+    const lis = [...document.querySelectorAll('#v-heute li[data-bi]')]; const ol = lis.length ? lis[0].parentElement : null; if (!ol) return;
+    ol.querySelectorAll('li.waitx').forEach(x => x.remove()); const td = new Date().toLocaleDateString('sv-SE');
+    waitsOpen().filter(w => (w.due && w.due < td) || waitReply(w)).forEach(w => { const rep = waitReply(w);
+      ol.insertAdjacentHTML('afterbegin', '<li class="overdue overdue-x waitx" data-wimid="' + esc(w.imid) + '"><span class="odbadge">' + (rep ? 'Antwort da' : 'Wartet seit ' + esc(new Date(w.at).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' }))) + '</span> <b>' + esc((w.subject || '').slice(0, 110)) + '.</b> ' + esc(w.from || '') + (rep ? ' hat geantwortet. Auflösen oder weiter warten.' : ', keine Antwort bis ' + esc(fmtDue(w.due)) + '. Nachfassen, weiter warten oder auflösen.') + ' ' + waitChips(w) + '</li>'); });
+  }
   function addOverdue() {
     const lis = [...document.querySelectorAll('#v-heute li[data-bi]')]; const ol = lis.length ? lis[0].parentElement : null; if (!ol || !model) return;
     ol.querySelectorAll('li.overdue-x').forEach(x => x.remove());
@@ -1903,6 +1934,7 @@ if (S.cockpit) {
       + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '" title="Erledigt, z. B. direkt in Outlook. Verschwindet sofort aus Braucht dich, Buddy schlägt sie nicht mehr vor.">Erledigt ✓</button>')
       + (S.setRead ? (m.isRead ? '<button data-mread="' + esc(m.id) + '" data-v="0" title="Wieder als ungelesen markieren">Ungelesen</button>' : '<button data-mread="' + esc(m.id) + '" data-v="1" title="Als gelesen markieren (auch in Outlook)">Gelesen ✓</button>') : '')
       + (mailDone(m) ? '' : '<button class="mstar' + (mailStar(m) ? ' on' : '') + '" data-mstar="' + esc(m.id) + '" title="' + (mailStar(m) ? 'Nicht mehr „Braucht mich“' : 'Für mich wichtig: unter „Braucht dich“, Buddy führt es in der Lage') + '">' + (mailStar(m) ? '★ Braucht mich' : '☆ Braucht mich') + '</button>')
+      + (mailDone(m) || waitOf(m) ? '' : '<button data-mwait="' + esc(m.id) + '" title="Ohne Task verfolgen: nach 14 Tagen ohne Antwort unter „Braucht dich“; Mail darfst du ablegen">⏳ Wartet auf Antwort</button>')
       + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : st.pinKeep && st.pinKeep.has(m.id) ? '📌 Wieder anheften' : '📌 Anheften') + '</button>' : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
@@ -1945,7 +1977,7 @@ if (S.cockpit) {
     const hitsHtml = !srv ? '' : '<details class="mgroup g-atts" open><summary><span class="gt">Anhang-Name enthält „' + esc(st.mq.trim()) + '“</span><span class="cnt2">' + (hits && hits.list ? hits.list.filter(m => !inIds.has(m.id)).length : '…') + '</span><span class="cs">alle Ordner, auch Gesendet und abgelegte</span></summary>'
       + (!hits || !hits.list ? '<div class="empty">Suche läuft …</div>' : hits.err ? '<div class="errbox">' + esc(hits.err) + '</div>' : hits.list.filter(m => !inIds.has(m.id)).map(mailRow).join('') || '<div class="empty">Keine weiteren Treffer ausserhalb des Posteingangs.</div>') + '</details>';
     const g = { needs: [], neu: [], waiting: [], info: [], done: [], old: [] };
-    list.forEach(m => (g[mailCat(m)] || g.old).push(m));
+    list.filter(m => !waitOf(m)).forEach(m => (g[mailCat(m)] || g.old).push(m));   // Wartet auf Antwort: eigene Gruppe oben
     const sec = (k, title, sub, open) => {
       if (!g[k].length) return '';
       const n = st.shown[k] || PAGE, rows = g[k].slice(0, n).map(mailRow).join('');
@@ -1957,7 +1989,7 @@ if (S.cockpit) {
     const isOpen = (k, d) => (k in open ? open[k] : d);
     $('mlist').innerHTML = '<div class="mfilter">' + (S.createNewDraft ? '<button data-newmail="1" data-subj="">✉ Neue Mail</button> ' : '') + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + ' <button id="btnPin" class="' + (st.pinOnly ? 'primary' : '') + '" aria-pressed="' + (st.pinOnly ? 'true' : 'false') + '" title="Nur Mails, die du in Outlook angeheftet hast">📌 ' + (st.pinOnly ? 'Nur angeheftete (' + nPin + ') · alle zeigen' : 'Angeheftet (' + nPin + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
       + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' + (nQ - list.length ? ', ' + (nQ - list.length) + ' durch Filter ausgeblendet (' + [st.unreadOnly && 'Nur ungelesene', st.attOnly && 'Anhänge', st.pinOnly && 'Angeheftet'].filter(Boolean).join(', ') + ')' : '') : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
-      + hitsHtml + ftHtml
+      + hitsHtml + ftHtml + (q ? '' : waitHtml())
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
       + sec('waiting', 'Wartet auf andere', 'du bist nicht am Zug', isOpen('waiting', false))
