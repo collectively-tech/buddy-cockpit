@@ -1295,7 +1295,7 @@ if (S.cockpit) {
     try { st.req = rq && rq.text ? (JSON.parse(rq.text).requested || null) : null; } catch (e) { st.req = null; }
     const f = await S.readPath(P.triage).catch(() => null);
     if (f && f.text) {
-      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; }
+      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; }
       catch (e) { st.err.triage = 'mail-triage.json nicht lesbar'; }
     }
     st.appends = [];
@@ -1303,7 +1303,7 @@ if (S.cockpit) {
       try { const j = await ghTriage(); const odDate = st.triageDate;
         if (j && j.generated && (!odDate || Date.parse(j.generated) > Date.parse(odDate))) mirrorToOneDrive(j).catch(e => console.log('mirror', e && e.message));
         if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
-          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.appends = j.boardAppends || []; st.jobsGh = j.jobsQueue && (j.jobsQueue.items || []).length ? j.jobsQueue : null; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
+          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; st.appends = j.boardAppends || []; st.jobsGh = j.jobsQueue && (j.jobsQueue.items || []).length ? j.jobsQueue : null; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
         delete st.err.gh;
       } catch (e) { st.err.gh = e.message; }
     }
@@ -1329,7 +1329,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'fa5a5700d7';
+  const BUILD = '43c62c6321';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1537,6 +1537,7 @@ if (S.cockpit) {
     d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
     d += '</details>';
+    const pw = (st.waitSug || []).filter(x => x && x.imid && !st.dec['wait:' + x.imid] && !st.dec['waitsug:' + x.imid]);   // Motor 7s (Chris 09.11.)
     const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id] && !(x.action === 'done' && taskDoneByTitle(x.title)));   // schon erledigte Tasks nicht mehr zum Abhaken vorschlagen (Chris 19.10.)
     let v = '';
     {
@@ -1548,8 +1549,9 @@ if (S.cockpit) {
         : pending()
           ? '<span class="cs" id="sugReq">' + (since > 10 ? 'Kein Ergebnis vom Lauf ' + hmOf(ghReq()) + '.' : 'Buddy aktualisiert (seit ' + hmOf(ghReq()) + '), Ergebnis in 2 bis 4 Min., Cockpit lädt selbst neu') + '</span>' + (since > 10 ? '<button class="btn" id="btnSugRefresh" title="Startet Buddys Routine nochmals, der alte Auftrag wird geschlossen.">Nochmals starten ↻</button>' : '')
           : '<button class="btn" id="btnSugRefresh" title="Startet sofort Buddys Routine (Claude-Abo). Ergebnis nach 2 bis 4 Minuten, das Cockpit lädt dann selbst neu.">Aktualisieren ↻</button>';
-      v = '<details class="card sugcard fold"' + (lsGet('cockpit-sug-open') ? ' open' : '') + '><summary class="ch"><h2>💡 ' + (ps.length + ph.length) + ' Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</summary>'
-        + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
+      v = '<details class="card sugcard fold"' + (lsGet('cockpit-sug-open') ? ' open' : '') + '><summary class="ch"><h2>💡 ' + (ps.length + ph.length + pw.length) + ' Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</summary>'
+        + (ps.length || ph.length || pw.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
+        + pw.map(x => '<div class="prow sug"><span class="pt"><b>⏳ Wartet auf Antwort?</b> ' + esc(x.subject || '') + '<small>an ' + esc(x.to || '') + (x.why ? ' · ' + esc(x.why) : '') + '</small></span><span class="sa">' + (x.link ? '<a class="chip" href="' + esc(x.link) + '" target="outlook" rel="noopener">Mail ↗</a>' : '') + '<button class="primary" data-wsacc="' + esc(x.imid) + '">Übernehmen</button><button data-wsrej="' + esc(x.imid) + '">Nein</button></span></div>').join('')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span><span class="sa">'
           + (x.link ? mailChipLabel(x.link, 'Mail') : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Vorschlag „' + x.title + '“.', true) + '<select class="spanel" data-spanel="' + esc(x.id) + '" title="Panel">' + panelOptions(SPSEL[x.id] && C.view(model).some(p => p.name === SPSEL[x.id]) ? SPSEL[x.id] : C.view(model).some(p => p.name === x.panel) ? x.panel : (C.view(model)[0] || {}).name) + '</select><button class="primary" data-sacc="' + esc(x.id) + '">Übernehmen</button><button data-srej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, 'Neuer Task: „' + x.title + '“' + (x.panel ? ', Panel ' + x.panel : '') + (x.due ? ', Frist ' + x.due : '')) + '</span></div>').join('')
@@ -1746,6 +1748,11 @@ if (S.cockpit) {
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-ptwrong]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     const title = b.dataset.ptitle || ''; await decide(b.dataset.ptwrong, 'wrong', { kind: 'lage', title, by: 'cockpit' }); toast('Danke, Punkt ist weg. Buddy bringt ihn nicht wieder und prüft die Ursache.');
     try { const f = 'AI-CoS/knowledge/korrekturen.md'; const cur = await S.readPath(f); if (cur && cur.text != null && S.writePath) await S.writePath(f, cur.text.replace(/\s*$/, '') + '\n- ' + new Date().toLocaleDateString('sv-SE') + ' | BEHAUPTUNG-OHNE-BEWEIS | Cockpit: „Stimmt nicht“ bei Lage-Punkt „' + title.replace(/[|\n]/g, ' ').slice(0, 100) + '“ | Lage-Punkt falsch (Ursache prüfen: neueste Mail im Thread?) | lage: wrong in decisions.json\n'); } catch (er) { /* Log best effort */ } }, true);
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-wsacc],[data-wsrej]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const imid = b.dataset.wsacc || b.dataset.wsrej; const x = (st.waitSug || []).find(y => y.imid === imid) || {};
+    if (b.dataset.wsacc) { await decide('wait:' + imid, 'open', { subject: (x.subject || '').slice(0, 140), from: x.to || '', conv: x.conv || '', link: x.link || '', mid: x.id || '', due: isoPlus(14), by: 'vorschlag' }); toast('Wartet auf Antwort bis ' + fmtDue(isoPlus(14)) + '.'); }
+    else { await decide('waitsug:' + imid, 'rejected', { subject: (x.subject || '').slice(0, 100) }); toast('Ok, Buddy merkt sich das.'); }
+    paintHeute(); paintMails(); }, true);
   // „Wartet auf“: passenden Board-Task finden und Status direkt setzen (Chris 29.10.: On-Hold / Wartet / Aktiv)
   const normT = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   function taskForPoint(title) {
@@ -2347,7 +2354,7 @@ if (S.cockpit) {
     try {
       const d = await S.createReplyDraft(m.id, text); delete drEdit[m.id]; keepIds.add(m.id);
       if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
-      await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
+      await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink, buddy: String(tr.draftText || '').slice(0, 3000), sent: text.slice(0, 3000), to: fromAddr(m) });   // Stil lernen: Retro vergleicht buddy mit sent (Chris 09.11.)
       toast('Entwurf ist in Outlook offen: prüfen und senden. Die Mail bleibt hier mit „Entwurf öffnen ↗“.'); paintMails(); paintHeute();
     } catch (err) { if (win) win.close(); md.disabled = false; md.textContent = 'Ok, als Entwurf in Outlook'; setStatus(err.message, 'err'); }
   });
