@@ -100,7 +100,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -194,6 +194,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <button id="btnWait" title="Wartende Tasks ein- oder ausblenden">Wartet ausblenden</button>
   <button id="btnOver" title="Nur aktive Tasks mit Fälligkeit vor heute">Überfällig</button>
   <button id="btnDated" title="Alle Tasks mit Datum, früh fällig zuerst">Terminiert</button>
+  <button id="btnUndated" title="Aktive Tasks ohne Frist, nach Thema (Panel)">Ohne Frist</button>
   <button id="btnArch">Archiv zeigen</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
@@ -791,6 +792,7 @@ const C = window.TBCore;
 let onRender = null, cockpitStart = null, onTaskOpen = null;
 let lastText = null, lastVer = null, model = null, showArch = false, busy = Promise.resolve(), keys = new Map(), editing = null, editingPanel = null;
 let showHold = false; try { showHold = localStorage.getItem('tb-show-hold') === '1'; } catch (e) { /* Standard: ausgeblendet */ }
+let onlyUndated = false;   // Filter „Ohne Frist“ (Chris 09.11.): aktive Tasks ohne Datum, nach Panel
 let onlyDated = false;   // Filter „Terminiert“ (Chris 06.11.): alle Tasks mit Datum als eine Liste, früh fällig zuerst
 let onlyOver = false;   // Filter „Überfällig“ (Chris 02.11.), gleiche Regel wie Kennzahl: aktiv und fällig vor heute
 let hideWait = false; try { hideWait = localStorage.getItem('tb-hide-wait') === '1'; } catch (e) { /* Standard: wartende sichtbar (Chris 29.10.) */ }
@@ -899,13 +901,15 @@ function render() {
   }
   const hasDue = l => /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due'));
   const isOver = l => l.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdy;
+  let undN = 0;
   const html = panels.map((p, pi) => {
     datedN += p.visible.filter(t => hasDue(t.line) && (showHold || t.line.status !== 'hold')).length;
     if (onlyDated) p.visible.forEach(t => { if (hasDue(t.line) && matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait')) dated.push(Object.assign({ panel: p.name }, t)); });
-    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
+    const vis = p.visible.filter(t => matches(t.line, q) && (showHold || t.line.status !== 'hold') && (!hideWait || t.line.status !== 'wait') && (!onlyOver || isOver(t.line)) && (!onlyUndated || (t.line.status === 'active' && !hasDue(t.line))));   // On-Hold standardmässig ausgeblendet (Chris 09.10.), bei Suche sichtbar
     total += p.visible.length; arch += p.archived.length; holdN += p.visible.filter(t => t.line.status === 'hold').length; waitN += p.visible.filter(t => t.line.status === 'wait').length; overN += p.visible.filter(t => isOver(t.line)).length;
     if (q) hidN += p.visible.filter(t => matches(t.line, q)).length - vis.length;
-    if (onlyOver && !vis.length) return '';
+    undN += p.visible.filter(t => t.line.status === 'active' && !hasDue(t.line)).length;
+    if ((onlyOver || onlyUndated) && !vis.length) return '';
     const rows = vis.map(t => rowHtml(t)).join('');
     let ar = '';
     if (showArch) {
@@ -933,6 +937,7 @@ function render() {
   $('btnArch').classList.toggle('on', showArch);
   $('btnHold').textContent = showHold ? 'On-Hold ausblenden' : 'On-Hold zeigen (' + holdN + ')'; $('btnHold').classList.toggle('on', showHold);
   $('btnOver').textContent = onlyOver ? 'Alle zeigen' : 'Überfällig (' + overN + ')'; $('btnOver').classList.toggle('on', onlyOver);
+  $('btnUndated').textContent = onlyUndated ? 'Alle zeigen' : 'Ohne Frist (' + undN + ')'; $('btnUndated').classList.toggle('on', onlyUndated);
   $('btnDated').textContent = onlyDated ? 'Alle zeigen' : 'Terminiert (' + datedN + ')'; $('btnDated').classList.toggle('on', onlyDated);
   $('btnWait').textContent = hideWait ? 'Wartet zeigen (' + waitN + ')' : 'Wartet ausblenden'; $('btnWait').classList.toggle('on', hideWait);
   $('foot').textContent = (hidN ? hidN + ' Treffer durch Filter ausgeblendet (Wartet/On-Hold/Überfällig) · ' : '') + total + ' offene Aufgaben' + (waitN ? ', ' + waitN + ' wartet' : '') + (holdN ? ' (davon ' + holdN + ' On-Hold' + (showHold ? '' : ', ausgeblendet') + ')' : '') + ' · ' + arch + ' im Archiv · Quelle: tasks/board.md · Nummern wie im Cowork-Board';
@@ -940,8 +945,9 @@ function render() {
 }
 $('q').oninput = () => render();
 $('btnArch').onclick = () => { showArch = !showArch; render(); };
-$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) { showArch = false; onlyDated = false; } render(); };
-$('btnDated').onclick = () => { onlyDated = !onlyDated; if (onlyDated) { showArch = false; onlyOver = false; } render(); };
+$('btnOver').onclick = () => { onlyOver = !onlyOver; if (onlyOver) { showArch = false; onlyDated = false; onlyUndated = false; } render(); };
+$('btnUndated').onclick = () => { onlyUndated = !onlyUndated; if (onlyUndated) { showArch = false; onlyDated = false; onlyOver = false; } render(); };
+$('btnDated').onclick = () => { onlyDated = !onlyDated; if (onlyDated) { showArch = false; onlyOver = false; onlyUndated = false; } render(); };
 $('btnWait').onclick = () => { hideWait = !hideWait; try { localStorage.setItem('tb-hide-wait', hideWait ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 $('btnHold').onclick = () => { showHold = !showHold; try { localStorage.setItem('tb-show-hold', showHold ? '1' : ''); } catch (e) { /* ohne Speicher */ } render(); };
 
@@ -1323,7 +1329,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'e67da0c31f';
+  const BUILD = '6318e305fc';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1525,12 +1531,12 @@ if (S.cockpit) {
     c += '</section>';
     // Fällige Tasks
     const in7 = new Date(); in7.setDate(in7.getDate() + 7); const lim = in7.toLocaleDateString('sv-SE');
-    const due = model ? C.view(model).flatMap(p => p.visible.map(x => Object.assign({ panel: p.name, color: p.color }, x))).filter(x => x.line.status === 'active' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') <= lim).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1) : [];
+    const due = model ? C.view(model).flatMap(p => p.visible.map(x => Object.assign({ panel: p.name, color: p.color }, x))).filter(x => x.line.status !== 'done' && /^\d{4}-\d{2}-\d{2}/.test(field(x.line, 'due')) && field(x.line, 'due') > tdyS() && field(x.line, 'due') <= lim).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1) : [];
     const tdy = new Date().toLocaleDateString('sv-SE'), over = due.filter(x => field(x.line, 'due') < tdy).length;
-    let d = '<section class="card"><div class="ch"><h2>Überfällig und fällig in 7 Tagen</h2><span class="cs">' + (over ? over + ' überfällig · ' : '') + (due.length - over) + ' bald fällig</span></div>';
+    let d = '<details class="card fold" id="secWeek"' + (lsGet('cockpit-week-open') ? ' open' : '') + '><summary class="ch"><h2>📅 ' + due.length + ' in den nächsten 7 Tagen fällig</h2><span class="cs">Heute Fälliges steht oben unter „Braucht dich“</span></summary>';
     d += due.length ? due.map(x => { const id = 'k' + x.idx; keys.set(id, C.keyOf(model, x.idx)); const dd = field(x.line, 'due');
       return '<div class="prow" data-open="' + id + '" style="--c:' + esc(x.color) + '"><span class="pn">' + x.num + '/</span><span class="pt">' + esc(x.line.title) + '<small>' + esc(x.panel) + '</small></span>' + chipsHtml(x.line) + '<span class="due' + (dd < t ? ' over' : '') + '">' + esc(fmtDue(dd)) + '</span></div>'; }).join('') : '<div class="empty">Nichts fällig.</div>';
-    d += '</section>';
+    d += '</details>';
     const ps = st.sug.filter(x => !st.dec[x.id]), ph = st.hyg.filter(x => !st.dec[x.id] && !(x.action === 'done' && taskDoneByTitle(x.title)));   // schon erledigte Tasks nicht mehr zum Abhaken vorschlagen (Chris 19.10.)
     let v = '';
     {
@@ -1542,7 +1548,7 @@ if (S.cockpit) {
         : pending()
           ? '<span class="cs" id="sugReq">' + (since > 10 ? 'Kein Ergebnis vom Lauf ' + hmOf(ghReq()) + '.' : 'Buddy aktualisiert (seit ' + hmOf(ghReq()) + '), Ergebnis in 2 bis 4 Min., Cockpit lädt selbst neu') + '</span>' + (since > 10 ? '<button class="btn" id="btnSugRefresh" title="Startet Buddys Routine nochmals, der alte Auftrag wird geschlossen.">Nochmals starten ↻</button>' : '')
           : '<button class="btn" id="btnSugRefresh" title="Startet sofort Buddys Routine (Claude-Abo). Ergebnis nach 2 bis 4 Minuten, das Cockpit lädt dann selbst neu.">Aktualisieren ↻</button>';
-      v = '<section class="card sugcard"><div class="ch"><h2>Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</div>'
+      v = '<details class="card sugcard fold"' + (lsGet('cockpit-sug-open') ? ' open' : '') + '><summary class="ch"><h2>💡 ' + (ps.length + ph.length) + ' Vorschläge von Buddy</h2><span class="cs">' + (ps.length + ph.length) + ' offen · ' + stand + ' · nichts passiert ohne deinen Klick</span>' + refresh + '</summary>'
         + (ps.length || ph.length ? '' : '<div class="empty">Keine offenen Vorschläge.</div>')
         + ps.map(x => '<div class="prow sug"><span class="pt"><b>Neuer Task:</b> ' + esc(x.title) + '<small>' + esc(x.panel || '') + (x.due ? ' · Frist ' + esc(fmtDue(x.due)) : '') + ' · ' + esc(x.why || '') + '</small></span><span class="sa">'
           + (x.link ? mailChipLabel(x.link, 'Mail') : '')
@@ -1550,7 +1556,7 @@ if (S.cockpit) {
         + ph.map(x => '<div class="prow sug"><span class="pt"><b>' + (x.action === 'done' ? 'Abhaken?' : 'Frist ' + esc(fmtDue(x.due || '')) + '?') + '</b> ' + esc(x.title) + '<small>' + esc(x.why || '') + '</small></span><span class="sa">'
           + (x.evidence && /^https?:/.test(x.evidence) ? (itemIdOf(x.evidence) ? mailChipLabel(x.evidence, 'Beleg') : '<a class="chip" href="' + esc(x.evidence) + '" target="outlook">Beleg ↗</a>') : '')
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.', true) + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hhold="' + esc(x.id) + '" title="Task bleibt im Board, aber pausiert (On-Hold), Frist bleibt">On-Hold</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</span></div>').join('')
-        + '</section>';
+        + '</details>';
     }
     $('v-heute').innerHTML = jobsCard() + v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
@@ -1584,7 +1590,7 @@ if (S.cockpit) {
       const wt = model ? C.view(model).flatMap(p => p.visible).filter(t => t.line.status === 'wait') : [];   // Status wait ersetzt den Tag #wartet (Chris 16.10.2026)
       const key = t => (t.line.title.split(/[:(]/)[0] || t.line.title).trim().toLowerCase().slice(0, 18);
       const biTasks = new Set([...document.querySelectorAll('#v-heute li[data-bi]')].map(li => { const b = li.querySelector(':scope > b, :scope > strong'); const x = taskForPoint(((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim()); return x ? x.i : -1; }));
-      const miss = wt.filter(t => !have.includes(key(t)) && !biTasks.has(t.idx) && !isOver(t.line));   // überfällig steht oben unter „Braucht dich“ (Chris 06.11.)   // steht schon unter „Braucht dich“: nicht doppelt in „Wartet auf“ (Chris 05.11.)
+      const miss = wt.filter(t => !have.includes(key(t)) && !biTasks.has(t.idx) && !isDueNow(t.line));   // überfällig steht oben unter „Braucht dich“ (Chris 06.11.)   // steht schon unter „Braucht dich“: nicht doppelt in „Wartet auf“ (Chris 05.11.)
       if (miss.length && wl) { let n = wl.querySelectorAll('li').length;
         miss.forEach(t => { n++; const note = field(t.line, 'note'); wl.insertAdjacentHTML('beforeend', '<li value="' + n + '" class="wa" data-wa="' + n + '"><b>' + esc(t.line.title) + '.</b>' + (field(t.line, 'due') ? ' Wiedervorlage ' + esc(fmtDue(field(t.line, 'due'))) + '.' : '') + ' <span class="cs">aus dem Board</span></li>'); }); } }
     document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { const th = topicOf(li.textContent); if (th && !li.querySelector('.tchips')) li.insertAdjacentHTML('beforeend', topicChips(th, li.textContent.trim(), false)); });   // „Wartet auf“: Thema + Chats (Chris 10.10.)
@@ -1597,11 +1603,48 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addStarred(); addOverdue(); addWaits(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints();
+    addStarred(); addOverdue(); addWaits(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints(); compactLage();
   }
+  // „Heute“ nur mit dem, was heute braucht (Chris 09.11.): „Wartet auf“ eingeklappt mit Zähler (Tasks + Mails), „Später“ weg, „Heute möglich“ ein Vorschlag
+  const GOALS = [['Portfolio-Bewertung', /^portfolio/i], ['LKC und Mission', /^(mission|marketing)/i], ['BHC ohne verpasste Frist', /^(legal|finance|roger's tasks)/i], ['IT-Kosten runter', /^(bh-it|oc infra)/i], ['Roger entlastet', /^(roger|grok bot dev|seas)/i], ['Buddy besser', /^family/i]];
+  const goalOf = panel => { const g = GOALS.findIndex(x => x[1].test(panel || '')); return g < 0 ? 99 : g; };
+  const heuteSkip = new Set();
+  function heuteMoeglich() {
+    if (!model) return null; const hidden = k => (st.dec['heute:' + k] || {}).status === 'hidden';
+    const c = C.view(model).flatMap(p => p.visible.map(t => Object.assign({ panel: p.name }, t))).filter(t => t.line.status === 'active' && !/^\d{4}-\d{2}-\d{2}/.test(field(t.line, 'due')) && !tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich'))
+      .map(t => Object.assign(t, { k: normT(t.line.title).slice(0, 60), g: goalOf(t.panel) })).filter(t => !hidden(t.k) && !heuteSkip.has(t.k));
+    c.sort((a, b) => a.g - b.g || a.idx - b.idx); return c[0] || null;
+  }
+  function compactLage() {
+    const root = document.querySelector('#v-heute .md'); if (!root) return;
+    const sect = re => { const h = [...root.querySelectorAll('h3,h4,h5')].find(x => re.test(x.textContent.trim())); if (!h) return null; const els = [h]; let n = h.nextElementSibling; while (n && !/^H[1-6]$/.test(n.tagName)) { els.push(n); n = n.nextElementSibling; } return els; };
+    const sp = sect(/^Später/i); if (sp) sp.forEach(e => e.remove());   // Überlauf ohne Knöpfe: gehört als Task ins Board
+    const wa = sect(/^Wartet auf/i); const td = tdyS();
+    const ws = waitsOpen().filter(w => !(w.due && w.due < td) && !waitReply(w));
+    if (wa || ws.length) {
+      const nT = root.querySelectorAll('li[data-wa]').length, dues = [];
+      if (model) C.view(model).flatMap(p => p.visible).forEach(t => { const d = field(t.line, 'due'); if (t.line.status === 'wait' && /^\d{4}-\d{2}-\d{2}/.test(d) && d > td) dues.push(d); });
+      ws.forEach(w => { if (w.due) dues.push(w.due); }); dues.sort();
+      const det = document.createElement('details'); det.className = 'lagefold'; det.id = 'waFold'; if (lsGet('cockpit-wa-open')) det.open = true;
+      det.innerHTML = '<summary>⏳ ' + (nT + ws.length) + ' warten (' + nT + ' Tasks, ' + ws.length + ' Mails)' + (dues.length ? ' · nächste Wiedervorlage ' + esc(fmtDue(dues[0])) : '') + '</summary>';
+      if (wa) { wa[0].before(det); wa.forEach((e, i) => { if (i > 0) det.appendChild(e); }); wa[0].remove(); } else root.appendChild(det);
+      if (ws.length) det.insertAdjacentHTML('beforeend', '<div class="wamails"><b>Mails, Wartet auf Antwort</b>' + ws.map(w => '<div class="prow"><span class="pt">' + esc(w.subject || '') + '<small>' + esc(w.from || '') + ' · Frist ' + esc(fmtDue(w.due || '')) + '</small></span>' + waitChips(w) + '</div>').join('') + '</div>');
+    }
+    const t = heuteMoeglich(); const bi = root.querySelector('li[data-bi]'); const anchor = bi ? bi.parentElement : null;
+    if (t && anchor) { const kid = 'k' + t.idx; keys.set(kid, C.keyOf(model, t.idx));
+      anchor.insertAdjacentHTML('afterend', '<div class="heutem" data-hk="' + esc(t.k) + '"><span class="hml">💡 Heute möglich' + (t.g < 99 ? ' · Ziel ' + (t.g + 1) + ': ' + esc(GOALS[t.g][0]) : '') + '</span> <b>' + esc(t.line.title.slice(0, 140)) + '</b> <small>' + esc(t.panel) + '</small><br>'
+        + '<a class="chip okchip" data-hmdo="' + kid + '" title="Frist heute: steht dann unter „Braucht dich“">Heute machen</a> <a class="chip" data-open="' + kid + '">Task öffnen</a> <a class="chip" data-hmskip="' + esc(t.k) + '">Anderer Vorschlag</a> <a class="chip" data-hmhide="' + esc(t.k) + '" title="Diesen Task nie mehr vorschlagen">Ausblenden</a></div>'); }
+  }
+  document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.id) return; const k = { waFold: 'cockpit-wa-open', secWeek: 'cockpit-week-open' }[d.id] || (d.classList && d.classList.contains('sugcard') ? 'cockpit-sug-open' : ''); if (k) lsSet(k, d.open ? '1' : ''); }, true);
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-hmdo],[data-hmskip],[data-hmhide]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    if (b.dataset.hmdo) { const k = keys.get(b.dataset.hmdo); if (!k) return; b.textContent = 'Wird gespeichert …'; const ok = await commit({ type: 'edit', key: k, due: tdyS() }); if (ok) toast('Frist heute: steht jetzt unter „Braucht dich“.'); }
+    else if (b.dataset.hmskip) heuteSkip.add(b.dataset.hmskip);
+    else if (b.dataset.hmhide) await decide('heute:' + b.dataset.hmhide, 'hidden', {});
+    paintHeute(); }, true);
   // Überfällig bleibt oben (Chris 06.11., nach McAulays „stale experiments“): Task mit abgelaufener Frist steht zuoberst unter „Braucht dich“, bis erledigt oder neue Frist
   const tdyS = () => new Date().toLocaleDateString('sv-SE');
   const isOver = l => !!l && !!l.status && l.status !== 'done' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') < tdyS();
+  const isDueNow = l => !!l && !!l.status && l.status !== 'done' && /^\d{4}-\d{2}-\d{2}/.test(field(l, 'due')) && field(l, 'due') <= tdyS();   // Heute = überfällig ODER heute fällig (Chris 09.11.)
   const plusDays = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toLocaleDateString('sv-SE'); };
   const ptTitle = li => { const b = li.querySelector(':scope > b, :scope > strong'); return ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim(); };
   function addWaits() {   // „Wartet auf Antwort“: Frist vorbei oder Antwort da = unter „Braucht dich“ (Chris 09.11.)
@@ -1614,8 +1657,8 @@ if (S.cockpit) {
     const lis = [...document.querySelectorAll('#v-heute li[data-bi]')]; const ol = lis.length ? lis[0].parentElement : null; if (!ol || !model) return;
     ol.querySelectorAll('li.overdue-x').forEach(x => x.remove());
     const doneKey = li => { const d = st.dec['lage:' + ptTitle(li).toLowerCase().replace(/\s+/g, ' ')]; return d && d.status === 'done'; };
-    const ts = C.view(model).flatMap(p => p.visible).filter(t => isOver(t.line)).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1);
-    [...ts].reverse().forEach(t => { const due = field(t.line, 'due'); const badge = '<span class="odbadge">Überfällig seit ' + esc(fmtDue(due)) + '</span> ';
+    const ts = C.view(model).flatMap(p => p.visible).filter(t => isDueNow(t.line)).sort((a, b) => field(a.line, 'due') < field(b.line, 'due') ? -1 : 1);
+    [...ts].reverse().forEach(t => { const due = field(t.line, 'due'); const badge = '<span class="odbadge">' + (due === tdyS() ? 'Heute fällig' : 'Überfällig seit ' + esc(fmtDue(due))) + '</span> ';
       const hit = lis.find(li => !li.dataset.struck && !doneKey(li) && (taskForPoint(ptTitle(li)) || {}).i === t.idx);
       if (hit) { const hk = 'k' + t.idx; keys.set(hk, C.keyOf(model, t.idx)); hit.dataset.topen = hk; hit.title = 'Klicken: Task öffnen und bearbeiten'; hit.classList.add('overdue'); if (!hit.querySelector('.odbadge') && !/^\s*Überfällig seit/i.test(ownText(hit))) hit.insertAdjacentHTML('afterbegin', badge);   /* steht schon im Titel: nicht doppelt (Chris 09.11.) */ ol.insertBefore(hit, ol.firstChild); return; }
       document.querySelectorAll('#v-heute li[data-wa]').forEach(li => { if ((taskForPoint(ptTitle(li)) || {}).i === t.idx) { li.style.display = 'none'; li.dataset.odmoved = '1'; } });
