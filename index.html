@@ -100,7 +100,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -1329,7 +1329,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '6318e305fc';
+  const BUILD = '0abe7e99d7';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1603,8 +1603,16 @@ if (S.cockpit) {
           + '<a class="chip" data-newchat="' + esc(th ? th.id : '') + '" href="' + esc(buddyUrl(pr)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy: dieser Punkt mit allen zugehörigen Mails">' + (tc.querySelector('a.chip.chat') || started ? 'Neuer Chat ↗' : 'Neuer Chat zu diesem Punkt ↗') + '</a>');
         tc.querySelectorAll('a.chip.chat').forEach(a => { a.dataset.copy = pr; a.textContent = a.textContent.replace(/ ↗$/, ' + dieser Punkt ↗'); a.title = 'Öffnet den bestehenden Chat und kopiert Punkt und Mails: dort Cmd+V und Enter.'; });
       } });
-    addStarred(); addOverdue(); addWaits(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints(); compactLage();
+    addStarred(); addOverdue(); addWaits(); addChatChips(); addNewMailChips(); addStatusChips(); hideDonePoints(); compactLage(); linkStatus();
   }
+  // Status-Empfehlungen klickbar (Chris 09.11.): „(Punkt N)“ springt zum Punkt in „Braucht dich“ und hebt ihn hervor
+  function linkStatus() {
+    const root = document.querySelector('#v-heute .md'); if (!root) return; const stop = [...root.children].find(x => /^H[1-6]$/.test(x.tagName));
+    for (const el of [...root.children]) { if (el === stop) break;
+      el.querySelectorAll('li, p').forEach(n => { if (n.querySelector('[data-gopt]')) return; n.innerHTML = n.innerHTML.replace(/\b(Punkte?)\s+(\d+(?:\s*(?:,|und|\+)\s*\d+)*)/g, (all, w, nums) => w + ' ' + nums.replace(/\d+/g, d => document.querySelector('#v-heute li[data-bi="' + d + '"]') ? '<a class="golink" data-gopt="' + d + '" title="Zu Punkt ' + d + ' springen">' + d + '</a>' : d)); }); }
+  }
+  document.addEventListener('click', e => { const a = e.target.closest && e.target.closest('[data-gopt]'); if (!a) return; e.preventDefault(); e.stopPropagation();
+    const li = document.querySelector('#v-heute li[data-bi="' + a.dataset.gopt + '"]'); if (!li) return; li.style.display = ''; try { const r = li.getBoundingClientRect(); window.scrollTo({ top: r.top + window.scrollY - window.innerHeight / 3, behavior: 'smooth' }); } catch (er) { /* ohne Scroll */ } li.classList.add('flash'); setTimeout(() => li.classList.remove('flash'), 2200); }, true);
   // „Heute“ nur mit dem, was heute braucht (Chris 09.11.): „Wartet auf“ eingeklappt mit Zähler (Tasks + Mails), „Später“ weg, „Heute möglich“ ein Vorschlag
   const GOALS = [['Portfolio-Bewertung', /^portfolio/i], ['LKC und Mission', /^(mission|marketing)/i], ['BHC ohne verpasste Frist', /^(legal|finance|roger's tasks)/i], ['IT-Kosten runter', /^(bh-it|oc infra)/i], ['Roger entlastet', /^(roger|grok bot dev|seas)/i], ['Buddy besser', /^family/i]];
   const goalOf = panel => { const g = GOALS.findIndex(x => x[1].test(panel || '')); return g < 0 ? 99 : g; };
