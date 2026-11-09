@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '883b84fa5d';
+  const BUILD = '3afc3825b1';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1766,8 +1766,9 @@ if (S.cockpit) {
   const hintOf = {}, hintAsked = new Set(); let hintBusy = false;
   async function fillHints() {   // für Vorschläge ohne Ordner: Thread/Absender/Betreff fragen (folderHints), dann neu zeichnen
     if (hintBusy || !S.moveMessage) return; hintBusy = true; let got = 0;
-    try { for (const m of st.mails) { if (hintAsked.has(m.id)) continue; const p = proposal(m); if (!p || p.folder || p.a.reply || p.a.task || mailCat(m) === 'needs') continue;
-      hintAsked.add(m.id); const h = await folderHints(m).catch(() => []); const f = (h || []).find(okFolder); if (f) { hintOf[m.id] = f; got++; } } }
+    try { const todo = st.mails.filter(m => { if (hintAsked.has(m.id)) return false; const p = proposal(m); return p && !p.folder && !p.a.reply && !p.a.task; });
+      todo.forEach(m => hintAsked.add(m.id));
+      for (let i = 0; i < todo.length; i += 4) await Promise.all(todo.slice(i, i + 4).map(async m => { const h = await folderHints(m).catch(() => []); const f = (h || []).find(okFolder); if (f) { hintOf[m.id] = f; got++; } })); }   // je 4 parallel (live 09.11.: nacheinander zu langsam)
     finally { hintBusy = false; } if (got) paintMails();
   }
   function proposal(m) {
@@ -1784,7 +1785,7 @@ if (S.cockpit) {
       if (cat === 'needs' && tr.draftText && !tr.draft && !dlink(m) && !tr.draftHidden) a.reply = true;
       why = a.file ? 'gelernt: ' + lp.sure + ' % dieser Absender/Threads liegen in „' + lp.f.name + '“' : cat === 'info' ? 'nur Info' : '';
     }
-    let fromHint = false; if (!a.file && !a.reply && !a.task && cat !== 'needs' && hintOf[m.id]) { a.file = hintOf[m.id]; fromHint = true; why = (why ? why + '; ' : '') + 'Ordner aus Thread/Absender, bitte prüfen'; }   // Chris 09.11.: Vorschläge ohne Ordner waren nicht übernehmbar
+    let fromHint = false; if (!a.file && !a.reply && !a.task && hintOf[m.id]) { a.file = hintOf[m.id]; fromHint = true; why = (why ? why + '; ' : '') + 'Ordner aus Thread/Absender, bitte prüfen'; }   // Chris 09.11.: Vorschläge ohne Ordner waren nicht übernehmbar
     if (a.reply && (tr.draft || dlink(m) || !tr.draftText || !S.createReplyDraft)) delete a.reply;
     if (a.file && !m.isRead && !a.reply && !a.task) a.read = true;   // wer ablegt, hat sie gelesen
     if (a.read && m.isRead) delete a.read;
