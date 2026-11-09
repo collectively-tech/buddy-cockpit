@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'f3cfb012bd';
+  const BUILD = '72bf2124f9';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1759,7 +1759,7 @@ if (S.cockpit) {
   const fwdBlock = (m, tr) => !tr.forwardTo ? '' : flink(m) ? '<a class="btn" href="' + esc(flink(m)) + '" target="outlook" rel="noopener">Weiterleitung öffnen ↗</a>'
     : S.createForwardDraft ? '<details class="drf"><summary>Weiterleiten an ' + esc(tr.forwardTo) + '</summary><div class="drt">' + esc(tr.forwardText || '') + '</div><button class="primary" data-mfwd="' + esc(m.id) + '">Weiterleitung als Entwurf anlegen</button> <span class="drn">mit Anhang, wird nur angelegt, nicht gesendet</span></details>' : '';
   // Buddys Antwort-Vorschlag direkt im Cockpit ändern, dann als Entwurf in Outlook (Chris 09.11.); Änderungen überleben das Neuladen
-  const drEdit = {};
+  const drEdit = {}, keepIds = new Set();
   const drBox = (m, txt) => '<details class="drf" open><summary>Antwort-Vorschlag von Buddy (hier änderbar)</summary><textarea class="drt drta" data-drtxt="' + esc(m.id) + '" rows="' + Math.min(14, Math.max(4, String(drEdit[m.id] != null ? drEdit[m.id] : txt).split('\n').length + 1)) + '">' + esc(drEdit[m.id] != null ? drEdit[m.id] : txt) + '</textarea>'
     + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Ok, als Entwurf in Outlook</button> <span class="drn">liegt dann in Outlook bereit, du sendest selbst</span>' : '') + '</details>';
   document.addEventListener('input', e => { const t = e.target; if (t && t.dataset && t.dataset.drtxt) drEdit[t.dataset.drtxt] = t.value; });
@@ -1925,7 +1925,7 @@ if (S.cockpit) {
     if (!st.learn && S.moveMessage && (!st.learnTry || Date.now() - st.learnTry > 30e3)) setTimeout(loadLearn, 0);
     if (st.pinOnly === undefined) st.pinOnly = !!lsGet('cockpit-pin');
     const nUnread = list.filter(m => !m.isRead).length, nAtt = list.filter(m => m.hasAttachments).length, nPin = list.filter(m => m.pinned).length, nQ = list.length;
-    if (st.unreadOnly) list = list.filter(m => !m.isRead);
+    if (st.unreadOnly) list = list.filter(m => !m.isRead || keepIds.has(m.id));   // Mail mit eben angelegtem Entwurf bleibt sichtbar, bis du sendest (Chris 09.11.)
     if (st.attOnly) list = list.filter(m => m.hasAttachments);
     if (!st.pinKeep) st.pinKeep = new Set();
     if (st.pinOnly) list = list.filter(m => m.pinned || st.pinKeep.has(m.id));   // im Filter gelöste bleiben ausgegraut stehen, bis Filter wechselt oder neu geladen wird
@@ -2228,7 +2228,7 @@ if (S.cockpit) {
       const win = window.open('', 'outlook');   // sofort öffnen (Popup-Blocker), Ziel nach dem Anlegen setzen
       mr.disabled = true; const lbl = mr.textContent; mr.textContent = 'Lege Entwurf an …';
       try { const d = all ? await S.createReplyAllDraft(m.id, '') : await S.createReplyDraft(m.id, '');
-        if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
+        if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook'); keepIds.add(m.id);
         await decide(key, 'created', { link: d.webLink }); toast((all ? 'Antwort an alle' : 'Antwort') + ' liegt als Entwurf in Outlook offen (nicht gesendet)'); offerFile(m);
       } catch (err) { if (win) win.close(); setStatus(err.message, 'err'); }
       mr.disabled = false; mr.textContent = lbl; return; }
@@ -2244,12 +2244,13 @@ if (S.cockpit) {
     const m = anyMail(md.dataset.mdraft); if (!m) return;
     const tr = triageOf(m); const ta = md.closest('.drf') && md.closest('.drf').querySelector('textarea[data-drtxt]');
     const text = ((ta ? ta.value : drEdit[m.id] != null ? drEdit[m.id] : tr.draftText) || '').trim(); if (!text) { toast('Antwort ist leer.'); return; }
-    md.disabled = true; md.textContent = 'Lege Entwurf an …';
+    md.disabled = true; md.textContent = 'Lege Entwurf an …'; const win = window.open('', 'outlook');   // sofort öffnen (Popup-Blocker), dann zum Entwurf (Chris 09.11.: Link fehlte)
     try {
-      const d = await S.createReplyDraft(m.id, text); delete drEdit[m.id];
+      const d = await S.createReplyDraft(m.id, text); delete drEdit[m.id]; keepIds.add(m.id);
+      if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
       await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink });
-      toast('Entwurf liegt in Outlook (nicht gesendet)'); paintMails(); paintHeute();
-    } catch (err) { md.disabled = false; md.textContent = 'Ok, als Entwurf in Outlook'; setStatus(err.message, 'err'); }
+      toast('Entwurf ist in Outlook offen: prüfen und senden. Die Mail bleibt hier mit „Entwurf öffnen ↗“.'); paintMails(); paintHeute();
+    } catch (err) { if (win) win.close(); md.disabled = false; md.textContent = 'Ok, als Entwurf in Outlook'; setStatus(err.message, 'err'); }
   });
   document.addEventListener('click', async e => {
     if (e.target.closest('#btnGhTok')) { const v = ($('ghTokIn').value || '').trim(); if (!v) return; lsSet('cockpit-gh-token', v);
