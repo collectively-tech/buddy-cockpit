@@ -1323,7 +1323,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '3afc3825b1';
+  const BUILD = '1c88cd4f0a';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1545,7 +1545,7 @@ if (S.cockpit) {
           + fwdBlock(m, tr) + (tr.draftHidden ? '<span class="drn">' + esc(tr.draftHidden) + '</span>' : '')
           + (tr.draft ? '<a class="btn" href="' + esc(tr.draft) + '" target="outlook" rel="noopener">Entwurf von Buddy ↗</a>'
             : dlink(m) ? '<a class="btn" href="' + esc(dlink(m)) + '" target="outlook" rel="noopener">Entwurf öffnen ↗</a>'
-            : tr.draftText && S.createReplyDraft ? drBox(m, tr.draftText) : '')
+            : tr.draftText && S.createReplyDraft ? drBox(m, tr.draftText) : tr.draftHidden ? '' : drReq(m))
           + (mailDone(m) ? '<button data-mundo="' + esc(m.id) + '">Wieder offen</button>' : '<button class="primary" data-mdone="' + esc(m.id) + '">Erledigt ✓</button>')
           + (mailDone(m) ? '' : '<button class="mstar' + (mailStar(m) ? ' on' : '') + '" data-mstar="' + esc(m.id) + '">' + (mailStar(m) ? '★ Braucht mich' : '☆ Braucht mich') + '</button>')
           + attBlock(m)
@@ -1755,6 +1755,14 @@ if (S.cockpit) {
   const drBox = (m, txt) => '<details class="drf" open><summary>Antwort-Vorschlag von Buddy (hier änderbar)</summary><textarea class="drt drta" data-drtxt="' + esc(m.id) + '" rows="' + Math.min(14, Math.max(4, String(drEdit[m.id] != null ? drEdit[m.id] : txt).split('\n').length + 1)) + '">' + esc(drEdit[m.id] != null ? drEdit[m.id] : txt) + '</textarea>'
     + (S.createReplyDraft ? '<button class="primary" data-mdraft="' + esc(m.id) + '">Ok, als Entwurf in Outlook</button> <span class="drn">liegt dann in Outlook bereit, du sendest selbst</span>' : '') + '</details>';
   document.addEventListener('input', e => { const t = e.target; if (t && t.dataset && t.dataset.drtxt) drEdit[t.dataset.drtxt] = t.value; });
+  // Kein Vorschlag da: Buddy auf Klick einen schreiben lassen (Chris 09.11.): Anfrage in decisions.json (draftreq:<id>), Routine sofort starten
+  const drReq = m => { const d = st.dec['draftreq:' + m.internetMessageId]; if (!S.createReplyDraft || mailDone(m)) return '';
+    if (d && d.status === 'open') return '<span class="drn">Antwort-Vorschlag angefordert ' + esc(new Date(d.at).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' })) + ', Buddy schreibt ihn beim Lauf (2 bis 4 Min.)</span>';
+    return ghTok() ? '<button data-mdreq="' + esc(m.id) + '" title="Buddy schreibt einen Antwort-Vorschlag, du änderst ihn hier und legst ihn als Entwurf an">✍ Buddy, Antwort vorschlagen</button>' : ''; };
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-mdreq]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const m = anyMail(b.dataset.mdreq); if (!m) return; b.disabled = true; b.textContent = 'Wird angefordert …';
+    await decide('draftreq:' + m.internetMessageId, 'open', { subject: (m.subject || '').slice(0, 120), from: fromOf(m) });
+    if (!pending()) await startRun(false); paintMails(); toast('Buddy schreibt den Antwort-Vorschlag, er erscheint hier in 2 bis 4 Minuten.'); }, true);
   const dlink = m => { const d = st.dec['draft:' + m.internetMessageId]; return d && d.link; };
   // ---- Buddy schlägt vor (Chris 09.10.): pro Mail ein fertiger nächster Schritt, 1 Klick übernimmt, „Nein“ wird gelernt.
   // Quellen: Buddys Routine (triage.next) + gelernte Ablage (learnPick) + Einordnung. Nichts passiert ohne Klick, nie senden.
@@ -1874,7 +1882,7 @@ if (S.cockpit) {
       + nxHtml(m)
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
-      + (tr.draftText && !tr.draft && !dlink(m) ? drBox(m, tr.draftText) : '')
+      + (tr.draftText && !tr.draft && !dlink(m) ? drBox(m, tr.draftText) : !tr.draft && !dlink(m) && !tr.draftHidden ? (x => x ? '<div class="ma">' + x + '</div>' : '')(drReq(m)) : '')
       + (tr.forwardTo ? '<div class="ma">' + fwdBlock(m, tr) + '</div>' : '')
       + topicChips(topicOf((m.subject || '') + ' ' + fromOf(m) + ' ' + (m.from && m.from.emailAddress ? m.from.emailAddress.address : '') + ' ' + (m.bodyPreview || '') + ' ' + (tr.why || '')), 'Mail „' + (m.subject || '') + '“ von ' + fromOf(m) + '.', true)
       + '<div class="ma"><a class="btn" href="' + esc(m.webLink) + '" target="outlook" rel="noopener">Outlook</a>'
