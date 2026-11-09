@@ -100,7 +100,7 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.wait{ border-left:3px solid var(--warm); } .mail.wait.over{ border-left-color:var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .stzone{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted,#888); padding:4px 8px; margin:6px 0 2px; border-top:1px dashed var(--line); } .stzone span{ opacity:.7; } .stzone.drop{ background:var(--hotbg); color:var(--acc); outline:2px dashed var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -910,7 +910,11 @@ function render() {
     if (q) hidN += p.visible.filter(t => matches(t.line, q)).length - vis.length;
     undN += p.visible.filter(t => t.line.status === 'active' && !hasDue(t.line)).length;
     if ((onlyOver || onlyUndated) && !vis.length) return '';
-    const rows = vis.map(t => rowHtml(t)).join('');
+    const zoned = !q && !onlyOver && !onlyUndated && !onlyDated;   // Status-Rubriken als Ablageflächen (Chris 09.11.): ziehen = Status wechseln
+    const zone = (st, lbl, n) => '<div class="stzone" data-dropst="' + st + '" data-zpanel="' + esc(p.name) + '">' + lbl + ' <span>' + n + '</span></div>';
+    const grp = st => vis.filter(t => t.line.status === st).map(t => rowHtml(t)).join('');
+    const nS = st => vis.filter(t => t.line.status === st).length;
+    const rows = !zoned ? vis.map(t => rowHtml(t)).join('') : zone('active', 'Aktiv', nS('active')) + grp('active') + (hideWait ? '' : zone('wait', 'Wartet', nS('wait')) + grp('wait')) + (showHold ? zone('hold', 'On-Hold', nS('hold')) + grp('hold') : '');
     let ar = '';
     if (showArch) {
       const al = p.archived.filter(t => matches(t.line, q));
@@ -1105,14 +1109,21 @@ $('grid').addEventListener('dragend', () => { clearMarks(); drag = null; });
 $('grid').addEventListener('dragover', e => {
   if (!drag) return; e.preventDefault();
   document.querySelectorAll('.drop,.dropP').forEach(x => x.classList.remove('drop', 'dropP'));
-  if (drag.kind === 'task') { const t = e.target.closest('.task[data-k]'); if (t && t.dataset.k !== drag.id) t.classList.add('drop'); else { const p = e.target.closest('.panel'); if (p) p.classList.add('dropP'); } }
+  if (drag.kind === 'task') { const z = e.target.closest('[data-dropst]'); if (z) { z.classList.add('drop'); return; } const t = e.target.closest('.task[data-k]'); if (t && t.dataset.k !== drag.id) t.classList.add('drop'); else { const p = e.target.closest('.panel'); if (p) p.classList.add('dropP'); } }
   else { const p = e.target.closest('.panel'); if (p && p.dataset.panel !== drag.name) p.classList.add('dropP'); }
 });
 $('grid').addEventListener('drop', e => {
   if (!drag) return; e.preventDefault(); const d = drag; drag = null; clearMarks();
   if (d.kind === 'task') {
-    const key = keys.get(d.id); const t = e.target.closest('.task[data-k]');
-    if (t && t.dataset.k !== d.id) commit({ type: 'move', key, beforeKey: keys.get(t.dataset.k) });
+    const key = keys.get(d.id); const t = e.target.closest('.task[data-k]'); const z = e.target.closest('[data-dropst]');
+    const src = model.lines[+d.id.slice(1)] || {}; const srcSt = src.status, title = src.title;
+    const LBL = { active: 'Aktiv', wait: 'Wartet', hold: 'On-Hold' };
+    const setSt = to => { if (!to || to === srcSt || to === 'done') return Promise.resolve(true); const i = model.lines.findIndex(l => l && l.kind === 'task' && l.title === title && l.status === srcSt); return i < 0 ? Promise.resolve(false) : Promise.resolve(commit({ type: 'edit', key: C.keyOf(model, i), status: to })).then(ok => { if (ok) toast('Status jetzt: ' + LBL[to] + ' (' + title.slice(0, 50) + ')'); return ok; }); };
+    if (z) {   // auf Rubrik gezogen: Status wechseln, oben in die Rubrik
+      const to = z.dataset.dropst, pn = z.dataset.zpanel; const first = model.lines.findIndex((l, i) => l && l.kind === 'task' && l.status === to && C.view(model).some(p => p.name === pn && p.tasks.some(x => x.idx === i)));
+      const mv = first >= 0 && first !== +d.id.slice(1) ? commit({ type: 'move', key, beforeKey: C.keyOf(model, first) }) : (((C.view(model).find(p => p.tasks.some(x => x.idx === +d.id.slice(1))) || {}).name) !== pn ? commit({ type: 'move', key, panel: pn }) : true);
+      Promise.resolve(mv).then(ok => { if (ok) setSt(to); }); return; }
+    if (t && t.dataset.k !== d.id) { const tgtSt = (model.lines[+t.dataset.k.slice(1)] || {}).status; Promise.resolve(commit({ type: 'move', key, beforeKey: keys.get(t.dataset.k) })).then(ok => { if (ok) setSt(tgtSt); }); }
     else { const p = e.target.closest('.panel'); if (p && !(t && t.dataset.k === d.id)) commit({ type: 'move', key, panel: p.dataset.panel }); }
   } else { const p = e.target.closest('.panel'); if (p && p.dataset.panel !== d.name) commit({ type: 'movePanel', name: d.name, before: p.dataset.panel }); }
 });
@@ -1329,7 +1340,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '43c62c6321';
+  const BUILD = '7aa9886f63';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1896,6 +1907,7 @@ if (S.cockpit) {
       if (cat === 'needs' && tr.draftText && !tr.draft && !dlink(m) && !tr.draftHidden) a.reply = true;
       why = a.file ? 'gelernt: ' + lp.sure + ' % dieser Absender/Threads liegen in „' + lp.f.name + '“' : cat === 'info' ? 'nur Info' : '';
     }
+    { const af = st.archiveId && (st.folders || []).find(f => f.id === st.archiveId); if (af && !a.file && !a.reply && !a.task && (st.dec['arch:' + fromAddr(m)] || {}).status === 'on') { a.file = af; why = 'du archivierst diesen Absender'; } }   // gelernt aus „📦 Archiv“ (Chris 09.11.)
     let fromHint = false; if (!a.file && !a.reply && !a.task && hintOf[m.id]) { a.file = hintOf[m.id]; fromHint = true; why = (why ? why + '; ' : '') + 'Ordner aus Thread/Absender, bitte prüfen'; }   // Chris 09.11.: Vorschläge ohne Ordner waren nicht übernehmbar
     if (a.reply && (tr.draft || dlink(m) || !tr.draftText || !S.createReplyDraft)) delete a.reply;
     if (a.file && !m.isRead && !a.reply && !a.task) a.read = true;   // wer ablegt, hat sie gelesen
@@ -1927,6 +1939,27 @@ if (S.cockpit) {
       + fs.map(f => '<option value="' + esc(f.id) + '"' + (f.id === cur ? ' selected' : '') + '>' + esc(f.name) + '</option>').join('') + FSEARCH;
     return ' <select class="nxf" data-nxf="' + esc(m.id) + '" title="Ordner: vorgeschlagen aus deiner Ablage, hier änderbar">' + opts + '</select>';
   }
+  // Mail und Task zum gleichen Thema (Chris 09.11.): Buddy merkt es und schlägt vor, wo es bleibt
+  const reCore = s => String(s || '').replace(/^((re|aw|wg|fw|fwd|antw)\s*:\s*)+/i, '').trim();
+  function dupTask(m) { if (!model) return null; const iid = itemIdOf(m.webLink);
+    const byLink = model.lines.map((l, i) => ({ l, i })).find(x => x.l && x.l.kind === 'task' && x.l.status !== 'done' && iid && linksOf(x.l).some(u => itemIdOf(u) === iid));
+    return byLink || taskForPoint(reCore(m.subject)); }
+  function dupHtml(m) { if ((st.dec['dup:' + m.internetMessageId] || {}).status || mailDone(m) || !(mailStar(m) || waitOf(m) || mailCat(m) === 'needs')) return '';
+    const t = dupTask(m); if (!t) return ''; const kid = 'k' + t.i; keys.set(kid, C.keyOf(model, t.i)); const n = (C.view(model).flatMap(p => p.visible).find(x => x.idx === t.i) || {}).num;
+    return '<div class="nx dup"><span class="nxt">🔗 Gleiches Thema wie Task ' + (n ? n + '/ ' : '') + '<a data-open="' + kid + '">„' + esc(t.l.title.slice(0, 70)) + '“</a>. Vorschlag: als Task weiterführen, Mail hängt dann am Task und verlässt „Braucht dich“.</span><button class="primary" data-dupt="' + esc(m.id) + '" data-dupk="' + kid + '">Als Task weiterführen</button><button data-dupb="' + esc(m.id) + '">Beides behalten</button></div>'; }
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-dupt],[data-dupb]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const m = anyMail(b.dataset.dupt || b.dataset.dupb); if (!m) return;
+    if (b.dataset.dupb) { await decide('dup:' + m.internetMessageId, 'keep', { subject: (m.subject || '').slice(0, 100) }); paintMails(); paintHeute(); return; }
+    const k = keys.get(b.dataset.dupk), t = model.lines[+b.dataset.dupk.slice(1)]; b.disabled = true;
+    if (k && t && !linksOf(t).some(u => itemIdOf(u) === itemIdOf(m.webLink))) await commit({ type: 'edit', key: k, link: linksOf(t).concat(m.webLink).join(' | ') });
+    if (mailStar(m)) await decide('star:' + m.internetMessageId, 'off', { subject: m.subject || '', via: 'dup' });
+    if (waitOf(m)) await decide('wait:' + m.internetMessageId, 'resolved', Object.assign({}, waitOf(m), { status: 'resolved', via: 'dup' }));
+    await decide('dup:' + m.internetMessageId, 'task', { task: t ? t.title.slice(0, 100) : '' }); await decide('mail:' + m.internetMessageId, 'done', { subject: m.subject || '', via: 'dup' });
+    kpis(); paintMails(); paintHeute(); toast('Weiter als Task. Die Mail hängt am Task und ist aus „Braucht dich“ raus.'); }, true);
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-march]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const m = anyMail(b.dataset.march); if (!m) return; await loadFolders().catch(() => []);
+    if (!st.archiveId) { setStatus('Kein Archiv-Ordner in Outlook gefunden.', 'err'); return; }
+    await decide('arch:' + fromAddr(m), 'on', { from: fromOf(m), subject: (m.subject || '').slice(0, 100) }); await doMove(m.id, st.archiveId, true); toast('Archiviert. Bei diesem Absender schlägt Buddy künftig „Archiv“ vor.'); }, true);
   const nxHtml = m => { const p = proposal(m); if (!p) return '';
     return '<div class="nx"><span class="nxt">💡 <b>' + esc(p.label) + '</b>' + nxFolderSel(m, p) + (p.why ? ' <span class="nxw">· ' + esc(p.why) + '</span>' : '') + '</span>'
       + '<button class="primary" data-nxok="' + esc(m.id) + '">Übernehmen</button><button data-nxno="' + esc(m.id) + '" title="Nicht passend, Buddy lernt daraus">Nein</button></div>'; };
@@ -1982,6 +2015,7 @@ if (S.cockpit) {
       + '<div class="ms">' + (m.importance === 'high' ? '<span class="due">!</span> ' : '') + (m.pinned ? '<span title="In Outlook angeheftet">📌</span> ' : '') + esc(m.subject || '(ohne Betreff)') + (m.hasAttachments && !S.listAttachments ? ' <span class="hold">📎</span>' : '')
       + linked.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); return ' <button class="tlink" data-open="' + id + '">Task ' + t.num + '/</button>'; }).join('') + '</div>'
       + attBlock(m)
+      + dupHtml(m)
       + nxHtml(m)
       + (tr.why ? '<div class="mwhy">' + esc(tr.why) + '</div>' : '<div class="mp">' + esc((m.bodyPreview || '').slice(0, 180)) + '</div>')
       + (tr.draftHidden ? '<div class="drn">' + esc(tr.draftHidden) + '</div>' : '')
@@ -2000,6 +2034,7 @@ if (S.cockpit) {
       + (mailDone(m) || waitOf(m) ? '' : '<button data-mwait="' + esc(m.id) + '" title="Ohne Task verfolgen: nach 14 Tagen ohne Antwort unter „Braucht dich“; Mail darfst du ablegen">⏳ Wartet auf Antwort</button>')
       + (S.setPinned && st.mails.includes(m) ? '<button data-mpin="' + esc(m.id) + '" data-v="' + (m.pinned ? '0' : '1') + '" title="' + (m.pinned ? 'In Outlook nicht mehr anheften' : 'In Outlook oben anheften') + '">' + (m.pinned ? '📌 Lösen' : st.pinKeep && st.pinKeep.has(m.id) ? '📌 Wieder anheften' : '📌 Anheften') + '</button>' : '')
       + (S.moveMessage ? '<button data-mmove="' + esc(m.id) + '" title="In einen Ordner verschieben, mit Vorschlägen">Verschieben …</button>' : '')
+      + (S.moveMessage ? '<button data-march="' + esc(m.id) + '" title="In den Outlook-Ordner Archiv; Buddy schlägt das bei diesem Absender künftig selbst vor">📦 Archiv</button>' : '')
       + '<button data-mtask="' + esc(m.id) + '">+ Task</button><button data-mattach="' + esc(m.id) + '">An Task hängen</button>'
       + '<a class="btn ghost" href="' + esc(buddyUrl('Buddy, bitte übernimm diese Mail: Betreff „' + (m.subject || '') + '“ von ' + fromOf(m) + ', erhalten ' + new Date(m.receivedDateTime).toLocaleString('de-CH') + '. Lies sie im Volltext, sag mir kurz worum es geht und was du vorschlägst.')) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy, der diese Mail liest">Neuer Chat zu dieser Mail</a></div></div>';
   }
@@ -2196,7 +2231,7 @@ if (S.cockpit) {
       const list = await S.apiAll(url, null, 500).catch(() => []);
       for (const f of list) {
         const path = prefix ? prefix + ' / ' + f.displayName : f.displayName;
-        if (!sys[f.id] || sys[f.id] === 'inbox' || sys[f.id] === 'archive') { if (!sys[f.id] || sys[f.id] === 'archive') out.push({ id: f.id, name: path }); }
+        if (!sys[f.id] || sys[f.id] === 'inbox' || sys[f.id] === 'archive') { if (!sys[f.id] || sys[f.id] === 'archive') out.push({ id: f.id, name: path }); if (sys[f.id] === 'archive') st.archiveId = f.id; }
         if (f.childFolderCount && depth < 4 && sys[f.id] !== 'deleteditems' && sys[f.id] !== 'junkemail') await walk('/me/mailFolders/' + f.id + '/childFolders?$top=100&$select=id,displayName,childFolderCount', path, depth + 1);
       }
     }
