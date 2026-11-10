@@ -1364,7 +1364,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '8d18bf9c66';
+  const BUILD = '8b769f0c92';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1782,7 +1782,7 @@ if (S.cockpit) {
   }
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-ptwrong]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     const title = b.dataset.ptitle || ''; await decide(b.dataset.ptwrong, 'wrong', { kind: 'lage', title, by: 'cockpit' }); toast('Danke, Punkt ist weg. Buddy bringt ihn nicht wieder und prüft die Ursache.');
-    try { const f = 'AI-CoS/knowledge/korrekturen.md'; const cur = await S.readPath(f); if (cur && cur.text != null && S.writePath) await S.writePath(f, cur.text.replace(/\s*$/, '') + '\n- ' + new Date().toLocaleDateString('sv-SE') + ' | BEHAUPTUNG-OHNE-BEWEIS | Cockpit: „Stimmt nicht“ bei Lage-Punkt „' + title.replace(/[|\n]/g, ' ').slice(0, 100) + '“ | Lage-Punkt falsch (Ursache prüfen: neueste Mail im Thread?) | lage: wrong in decisions.json\n'); } catch (er) { /* Log best effort */ } }, true);
+    try { const f = 'AI-CoS/knowledge/fehlerjournal.md'; const cur = await S.readPath(f); if (cur && cur.text != null && S.writePath) await S.writePath(f, cur.text.replace(/\s*$/, '') + '\n- ' + new Date().toLocaleDateString('sv-SE') + ' | ? | BEHAUPTUNG-OHNE-BEWEIS | Lage-Punkt „' + title.replace(/[|\n]/g, ' ').slice(0, 100) + '“ im Cockpit | Lage-Punkt falsch angezeigt | Ursache prüfen (neueste Mail im Thread?), lage: wrong in decisions.json | Cockpit: „Stimmt nicht“\n'); } catch (er) { /* Log best effort */ } }, true);
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-wsacc],[data-wsrej]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     const imid = b.dataset.wsacc || b.dataset.wsrej; const x = (st.waitSug || []).find(y => y.imid === imid) || {};
     if (b.dataset.wsacc) { await decide('wait:' + imid, 'open', { subject: (x.subject || '').slice(0, 140), from: x.to || '', conv: x.conv || '', link: x.link || '', mid: x.id || '', due: isoPlus(14), by: 'vorschlag' }); toast('Wartet auf Antwort bis ' + fmtDue(isoPlus(14)) + '.'); }
