@@ -44,7 +44,8 @@ button.danger{ color:var(--hot); } button.on{ background:var(--ink); color:var(-
 .stack{ display:flex; flex-direction:column; gap:14px; }
 .card{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); overflow:hidden; }
 .ch{ display:flex; align-items:center; gap:10px; padding:13px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
-.ch h2{ font-size:14px; margin:0; font-weight:700; } .cs{ font-size:12px; color:var(--ink3); flex:1; }
+.ch h2{ font-size:14px; margin:0; font-weight:700; }
+a.calnk{ display:flex; align-items:center; gap:10px; text-decoration:none; color:var(--acc); } a.calnk .cs{ color:var(--acc); } a.calnk:hover h2{ text-decoration:underline; } .cs{ font-size:12px; color:var(--ink3); flex:1; }
 .md{ padding:6px 16px 14px; font-size:13.5px; line-height:1.5; }
 .md h3{ font-size:15px; margin:12px 0 4px; } .md h4{ font-size:12px; margin:14px 0 4px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink3); }
 .md ol,.md ul{ margin:4px 0; padding-left:20px; } .md li{ margin:5px 0; } .md p{ margin:6px 0; } .md code{ font-size:12px; background:var(--holdbg); padding:1px 5px; border-radius:5px; }
@@ -1367,7 +1368,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'f7d51474ed';
+  const BUILD = '3135735f0a';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1561,7 +1562,9 @@ if (S.cockpit) {
     b += useGh ? '<div class="md">' + md(st.lageGh.replace(/\n## Termine heute[\s\S]*$/, ''), true) + '</div>'   // Termine stehen rechts in der eigenen Karte
       : st.err.brief ? '<div class="errbox">Lage nicht lesbar: ' + esc(st.err.brief) + '</div>' : (st.brief ? '<div class="md">' + md(st.brief, true) + '</div>' : '<div class="empty">Noch keine Lage vorhanden.</div>');
     b += '</section>';
-    let c = '<section class="card" id="secTermine"><div class="ch"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></div>';
+    const calDay = 'https://outlook.office.com/calendar/view/day/' + t.replace(/-/g, '/');   // Klick auf Termine/Datum = Outlook-Kalender heute (Chris 11.11.)
+    let c = '<section class="card" id="secTermine"><div class="ch"><a class="calnk" href="' + calDay + '" target="outlook" title="Outlook-Kalender am heutigen Tag öffnen"><h2>Termine</h2><span class="cs">' + fmtDue(t) + '</span></a>'
+      + '<a class="btn ghost" href="https://outlook.office.com/calendar/deeplink/compose" target="outlook" title="Neuen Termin in Outlook anlegen">Neuer Termin</a></div>';
     if (st.err.cal) c += '<div class="errbox">Kalender nicht lesbar: ' + esc(st.err.cal) + '</div>';
     else if (!st.cal.length) c += '<div class="empty">Keine Termine heute.</div>';
     else { const now = new Date().toTimeString().slice(0, 5);
