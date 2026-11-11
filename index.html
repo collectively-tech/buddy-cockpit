@@ -1364,7 +1364,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '747c01f7e9';
+  const BUILD = '079e4c634a';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1499,7 +1499,7 @@ if (S.cockpit) {
       + '<a class="chip" data-wpush="' + esc(w.imid) + '" title="Wartet weiter, neue Frist in 7 Tagen">+7 Tage</a> <a class="chip" data-wdone="' + esc(w.imid) + '" title="Antwort da oder erledigt: nicht mehr verfolgen">Auflösen ✓</a>'; };
   function waitHtml() { const ws = waitsOpen(); if (!ws.length) return '';
     ws.sort((a, b) => (a.due || '') < (b.due || '') ? -1 : 1); const td = new Date().toLocaleDateString('sv-SE');
-    return '<details class="mgroup g-wait" open data-g="wait"><summary><span class="gt">⏳ Wartet auf Antwort</span><span class="cnt2">' + ws.length + '</span><span class="cs">ohne Task; nach Frist unter „Braucht dich“</span></summary>'
+    return '<details class="mgroup g-wait"' + (st.waitCol ? '' : ' open') + ' data-g="wait"><summary><span class="gt">⏳ Wartet auf Antwort</span><span class="cnt2">' + ws.length + '</span><span class="cs">ohne Task; nach Frist unter „Braucht dich“</span></summary>'
       + ws.map(w => { const over = w.due && w.due < td, rep = waitReply(w);
         return '<div class="mail mwait' + (over ? ' mover' : '') + '" data-wimid="' + esc(w.imid) + '"><div class="mf">' + esc(w.from || '') + ' · seit ' + esc(new Date(w.at).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })) + '</div><div class="ms">' + esc(w.subject || '(ohne Betreff)') + ' <span class="' + (over ? 'due over' : 'due') + '">' + (rep ? 'Antwort da' : (over ? 'überfällig seit ' : 'Frist ') + esc(fmtDue(w.due || ''))) + '</span></div><div class="ma">' + waitChips(w) + '</div></div>'; }).join('') + '</details>'; }
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-mwait],[data-wpush],[data-wdone],[data-wnudge]'); if (!b) return; e.preventDefault(); e.stopPropagation();
@@ -2508,7 +2508,7 @@ if (S.cockpit) {
     if ($('kpis') && $('kpis').innerHTML) kpis();
   }
   $('tabs').innerHTML = TABS.map(([k, l]) => '<button data-tab="' + k + '">' + l + '</button>').join('') + '<span class="tsp"></span><span class="bver" title="Cockpit-Version (Build) und seit wann sie läuft. Neue Version lädt automatisch oder mit ↻.">v ' + BUILD + ' · seit ' + buildSince() + '</span><button id="btnRefresh" class="rf" title="Alles neu laden, holt auch eine neue Cockpit-Version">↻</button>';
-  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { if (b.dataset.tab === 'mails') st.focus = null; go(b.dataset.tab); if (b.dataset.tab === 'mails') paintMails(); } });
+  $('tabs').addEventListener('click', e => { const b = e.target.closest('[data-tab]'); if (b) { if (b.dataset.tab === 'mails') { st.focus = null; st.waitCol = false; } go(b.dataset.tab); if (b.dataset.tab === 'mails') paintMails(); } });
   $('btnRefresh').onclick = () => { setStatus('Lade …', 'warn'); loadAll().then(() => setStatus('Aktualisiert ' + new Date().toLocaleTimeString('de-CH'), 'ok')); busy = busy.then(reload).catch(() => {}); };
   $('kpis').addEventListener('click', e => { const b = e.target.closest('[data-go]'); if (!b) return;
     if (b.dataset.go === 'needs') {   // Braucht dich: Filter aufheben, zu Mails, Gruppe „Braucht dich“ offen und im Blick
@@ -2552,6 +2552,7 @@ if (S.cockpit) {
   });
   $('mq').addEventListener('input', () => { st.mq = $('mq').value; st.shown = {}; st.focus = null; paintMails(); });
   $('v-mails').addEventListener('toggle', e => { const d = e.target.closest && e.target.closest('details[data-g]'); if (!d) return;
+    if (d.dataset.g === 'wait') { st.waitCol = !d.open; return; }   // Wartet bleibt zu bis zum nächsten Öffnen des Reiters Mails (Chris 11.11.)
     const o = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {}; o[d.dataset.g] = d.open; lsSet('cockpit-open', JSON.stringify(o)); }, true);
   document.addEventListener('click', e => {
     const more = e.target.closest('[data-more]'); if (more) { const k = more.dataset.more; st.shown[k] = (st.shown[k] || PAGE) + PAGE; paintMails(); return; }
