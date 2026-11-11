@@ -396,12 +396,14 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   }
 
   // Operationen. Rueckgabe: null = ok, sonst Fehlertext (nichts wurde geaendert).
+  // Wartet-Datum (Chris 11.11.): beim Wechsel auf wartet heute vermerken, beim Verlassen entfernen
+  function waitStamp(t, prev) { const has = t.fields.some(x => x.key === 'wait_since' && x.value); if (t.status === 'wait' && prev !== 'wait' && !has) setField(t, 'wait_since', today()); else if ((t.status === 'active' || t.status === 'hold') && has) setField(t, 'wait_since', ''); }   // erledigt behält das Datum, damit Reaktivieren byte-gleich bleibt
   function applyOp(model, op) {
     const L = model.lines;
     switch (op.type) {
       case 'status': {
         const i = findTask(model, op.key); if (i < 0) return 'Task nicht mehr gefunden (inzwischen geaendert?)';
-        const t = L[i]; t.status = op.status; t.dirty = true;
+        const t = L[i]; const prevSt = t.status; t.status = op.status; t.dirty = true; waitStamp(t, prevSt);
         if (op.status === 'done') setField(t, 'done', op.date || today());
         else setField(t, 'done', '');
         // Wiederkehrender Task (Chris 29.10.): beim Erledigen sofort die nächste Instanz anlegen
@@ -420,7 +422,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
         const t = L[i];
         if (op.title != null) { const v = clean(op.title); if (!v) return 'Titel darf nicht leer sein'; t.title = v; }
         ['due', 'repeat', 'tags', 'link', 'note'].forEach(k => { if (op[k] != null) setField(t, k, op[k]); });
-        if (op.status) t.status = op.status;
+        if (op.status) { const prevSt = t.status; t.status = op.status; waitStamp(t, prevSt); }
         t.dirty = true; return null;
       }
       case 'add': {
@@ -428,6 +430,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
         const title = clean(op.title); if (!title) return 'Titel darf nicht leer sein';
         const t = { kind: 'task', status: op.status || 'active', title, fields: [], raw: '', dirty: true };
         ['due', 'repeat', 'tags', 'link', 'note'].forEach(k => { if (op[k]) setField(t, k, op[k]); });
+        waitStamp(t, 'active');
         L.splice(lastTaskInsert(model, p), 0, t); return null;
       }
       case 'move': {
@@ -1364,7 +1367,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '079e4c634a';
+  const BUILD = 'f7d51474ed';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
