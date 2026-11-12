@@ -1282,14 +1282,14 @@ if (S.cockpit) {
         + '<a class="btn primary" href="https://outlook.office.com/mail/' + encodeURIComponent(mb) + '/drafts" target="outlook">Entwürfe öffnen ↗</a> <button class="btn" data-jobsdone="' + esc(bkey) + '">Gesendet ✓</button></div></section>';
     }
     const row = x => { const d = st.dec['jobs:' + x.id];
-      return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Gelesen:' : 'Entwurf:') + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + (x.note ? ' · ' + esc(x.note) : '') + '</small></span>'
+      return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Keine Antwort, nur gelesen:' : 'Entwurf:') + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + (x.note ? ' · ' + esc(x.note) : '') + '</small></span>'
         + (d ? (d.status === 'error' ? '<span class="cs" style="color:var(--err,#c00)">Fehler: ' + esc(d.error || '') + '</span>' : (d.webLink ? '<a class="chip" href="' + esc(d.webLink) + '" target="outlook">Entwurf ↗</a>' : '<span class="cs">erledigt</span>')) : '') + '</div>'; };
     // Nur Offenes zeigen, Erledigtes zusammengeklappt (Chris 20.10.: gesendete Entwürfe verwirrten)
     const sent = !!st.dec[bkey], doneRows = done.map(x => { const d = st.dec['jobs:' + x.id];
       return '<div class="prow sug"><span class="pt"><b>' + (x.kind === 'read' ? 'Gelesen:' : (sent ? 'Gesendet:' : 'Entwurf:')) + '</b> ' + esc(x.name || x.to || '') + '<small>' + esc(x.subject || '') + '</small></span>'
         + (d.status === 'error' ? '<span class="cs" style="color:var(--err,#c00)">Fehler: ' + esc(d.error || '') + '</span>' : (!sent && d.webLink ? '<a class="chip" href="' + esc(d.webLink) + '" target="outlook">Entwurf ↗</a>' : '')) + '</div>'; }).join('');
     return '<section class="card sugcard"><div class="ch"><h2>Antworten ' + esc(mb) + '</h2><span class="cs">' + nRep + ' Entwürfe, ' + nRead + ' nur gelesen · es wird nichts gesendet</span>'
-      + (open.length ? '<button class="primary" id="btnJobsRun"' + (st.jobsRun ? ' disabled' : '') + '>' + (st.jobsRun ? 'Läuft …' : (open.length + ' ausführen')) + '</button>' : '')
+      + (open.length ? '<button class="primary" id="btnJobsRun"' + (st.jobsRun ? ' disabled' : '') + '>' + (st.jobsRun ? 'Läuft …' : (nRep ? nRep + (nRep === 1 ? ' Entwurf anlegen' : ' Entwürfe anlegen') + (nRead ? ', ' + nRead + ' als gelesen' : '') : nRead + ' als gelesen markieren'))   /* klar sagen, was passiert (Chris 12.11.: erwartete Entwürfe, es waren nur Gelesen-Aufträge) */ + '</button>' : '')
       + (sent ? '' : ' <a class="btn ghost" href="https://outlook.office.com/mail/' + encodeURIComponent(mb) + '/drafts" target="outlook">Entwürfe in ' + esc(mb) + ' ↗</a>') + '</div>'
       + open.map(row).join('')
       + (done.length ? '<details class="jobsdone"><summary class="cs">' + esc(q.title || 'Frühere') + ': ' + done.length + ' erledigt' + (sent ? ', Antworten gesendet' : '') + '</summary>' + doneRows + '</details>' : '') + '</section>';
@@ -1368,7 +1368,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '51dfe23bc1';
+  const BUILD = '80a9c3f086';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
