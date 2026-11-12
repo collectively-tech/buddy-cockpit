@@ -103,7 +103,7 @@ a.calnk{ display:flex; align-items:center; gap:10px; text-decoration:none; color
 .ghset{ margin-left:auto; display:inline-flex; gap:6px; } .ghset input{ font:inherit; font-size:12px; padding:5px 8px; border:1px solid var(--line2); border-radius:8px; background:var(--card); color:var(--ink); width:220px; }
 .sugcard .ch #sugReq{ flex:0 1 auto; margin-left:auto; color:var(--acc); font-weight:600; }
 .sugcard .ch #btnSugNow{ margin-left:6px; font-size:11.5px; }
-.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.mwait{ box-shadow:inset 3px 0 0 var(--acc); }   /* Wartet: wie die Mails auf Heute, nicht wie der Status-Badge .wait (Chris 10.11.) */ .mail.mwait.mover{ box-shadow:inset 3px 0 0 var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .stzone{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted,#888); padding:4px 8px; margin:6px 0 2px; border-top:1px dashed var(--line); } .stzone span{ opacity:.7; } .stzone{ cursor:pointer; user-select:none; } .zgrp.col{ display:none; } .panel.pcol .addrow, .panel.pcol .archhead, .panel.pcol .task.arch{ display:none; }   /* eingeklappt: Rubriken mit Anzahl bleiben sichtbar (Chris 09.11.) */ .ptog{ background:none; border:0; color:inherit; cursor:pointer; padding:0 4px 0 0; font-size:13px; } .stzone.drop{ background:var(--hotbg); color:var(--acc); outline:2px dashed var(--acc); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
+.drf{ margin-top:6px; font-size:12.5px; } .drf summary{ cursor:pointer; color:var(--acc); font-weight:600; } .drt{ white-space:pre-wrap; background:var(--card2,rgba(127,127,127,.08)); border-radius:8px; padding:8px 10px; margin:6px 0; } .drn{ font-size:11.5px; opacity:.7; } .mail.mwait{ box-shadow:inset 3px 0 0 var(--acc); }   /* Wartet: wie die Mails auf Heute, nicht wie der Status-Badge .wait (Chris 10.11.) */ .mail.mwait.mover{ box-shadow:inset 3px 0 0 var(--hot); } a.golink{ color:var(--acc); font-weight:700; text-decoration:underline; cursor:pointer; padding:0 2px; } .md li.flash{ outline:2px solid var(--acc); outline-offset:3px; border-radius:6px; transition:outline .3s; } details.lagefold{ margin:10px 0; } details.lagefold>summary{ cursor:pointer; font-weight:600; color:var(--acc); } .stzone{ font-size:11px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted,#888); padding:4px 8px; margin:6px 0 2px; border-top:1px dashed var(--line); } .stzone span{ opacity:.7; } .stzone{ cursor:pointer; user-select:none; } .zgrp.col{ display:none; } .panel.pcol .addrow, .panel.pcol .archhead, .panel.pcol .task.arch{ display:none; }   /* eingeklappt: Rubriken mit Anzahl bleiben sichtbar (Chris 09.11.) */ .ptog{ background:none; border:0; color:inherit; cursor:pointer; padding:0 4px 0 0; font-size:13px; } .stzone.drop{ background:var(--hotbg); color:var(--acc); outline:2px dashed var(--acc); } .heutem .hmwhy{ font-size:13px; margin:4px 0 6px; color:var(--ink2); } .heutem{ margin:10px 0; padding:8px 10px; border:1px dashed var(--acc); border-radius:8px; } .heutem .hml{ font-weight:600; color:var(--acc); } details.card.fold>summary{ cursor:pointer; list-style:none; } details.card.fold>summary::-webkit-details-marker{ display:none; } textarea.drta{ display:block; width:100%; box-sizing:border-box; font:inherit; color:inherit; border:1px solid var(--line); resize:vertical; }
 .ma{ display:flex; gap:6px; margin-top:8px; flex-wrap:wrap; } .ma button,.ma .btn{ font-size:12px; padding:5px 10px; }
 .tlink{ font-size:11px; padding:1px 7px; border-radius:20px; background:var(--tagbg); color:var(--tagc); border:none; }
 .more{ margin:8px 16px 12px; }
@@ -1334,7 +1334,7 @@ if (S.cockpit) {
     try { st.req = rq && rq.text ? (JSON.parse(rq.text).requested || null) : null; } catch (e) { st.req = null; }
     const f = await S.readPath(P.triage).catch(() => null);
     if (f && f.text) {
-      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; }
+      try { const j = JSON.parse(f.text); st.triageDate = j.generated || null; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; st.heuteGh = j.heuteMoeglich || []; }
       catch (e) { st.err.triage = 'mail-triage.json nicht lesbar'; }
     }
     st.appends = [];
@@ -1342,7 +1342,7 @@ if (S.cockpit) {
       try { const j = await ghTriage(); const odDate = st.triageDate;
         if (j && j.generated && (!odDate || Date.parse(j.generated) > Date.parse(odDate))) mirrorToOneDrive(j).catch(e => console.log('mirror', e && e.message));
         if (j && j.generated && (!st.triageDate || Date.parse(j.generated) >= Date.parse(st.triageDate))) {
-          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; st.appends = j.boardAppends || []; st.jobsGh = j.jobsQueue && (j.jobsQueue.items || []).length ? j.jobsQueue : null; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
+          st.triageDate = j.generated; st.triage = {}; (j.items || []).forEach(x => { st.triage[x.id] = x; }); st.sug = j.suggestions || []; st.hyg = j.hygiene || []; st.waitSug = j.waitSuggest || []; st.heuteGh = j.heuteMoeglich || []; st.appends = j.boardAppends || []; st.jobsGh = j.jobsQueue && (j.jobsQueue.items || []).length ? j.jobsQueue : null; st.lageGh = typeof j.lage === 'string' && j.lage.trim() ? j.lage : null; }
         delete st.err.gh;
       } catch (e) { st.err.gh = e.message; }
     }
@@ -1368,7 +1368,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '5cc20a529e';
+  const BUILD = 'ba5d1693b3';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1665,11 +1665,16 @@ if (S.cockpit) {
     const mine = words(l.title), p = pre(l.title); if (!l.title.includes(':')) return false;
     return model.lines.some(o => o && o !== l && (o.status === 'wait' || o.status === 'hold') && o.title && o.title.includes(':') && pre(o.title) === p && (() => { const ow = words(o.title.split(':').slice(1).join(':') + ' ' + field(o, 'wait_on')); let n = 0; mine.forEach(w => { if (ow.has(w) && !p.includes(w)) n++; }); return n >= 2; })()); }
   const STOPW = new Set(['und', 'der', 'die', 'das', 'fuer', 'für', 'mit', 'von', 'auf', 'den', 'dem', 'ein', 'eine', 'the', 'and', 'for']);
+  // „Heute möglich“ nur noch mit Begründung aus dem Lauf (Chris 12.11.: mechanische Auswahl brachte Watch-Tasks ohne Handlung).
+  // Lauf liefert heuteMoeglich: [{ task, action, noetig }]; Cockpit zeigt den ersten, der noch aktiv ist. Ohne Lauf-Vorschlag: nichts.
   function heuteMoeglich() {
     if (!model) return null; const hidden = k => (st.dec['heute:' + k] || {}).status === 'hidden';
-    const c = C.view(model).flatMap(p => p.visible.map(t => Object.assign({ panel: p.name }, t))).filter(t => t.line.status === 'active' && !/^\d{4}-\d{2}-\d{2}/.test(field(t.line, 'due')) && !tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich'))
-      .map(t => Object.assign(t, { k: normT(t.line.title).slice(0, 60), g: goalOf(t.panel) })).filter(t => !hidden(t.k) && !heuteSkip.has(t.k) && !blockedByWait(t.line));
-    c.sort((a, b) => a.g - b.g || a.idx - b.idx); return c[0] || null;
+    const all = C.view(model).flatMap(p => p.visible.map(t => Object.assign({ panel: p.name }, t)));
+    for (const h of (st.heuteGh || [])) { if (!h || !h.task || !h.action || !h.noetig) continue;
+      const t = all.find(x => x.line.title === h.task || normT(x.line.title) === normT(h.task)); if (!t || t.line.status !== 'active' || /^\d{4}-\d{2}-\d{2}/.test(field(t.line, 'due')) || tagsOf(t.line).some(g => g.toLowerCase() === '#brauchtmich') || blockedByWait(t.line)) continue;   // mit Frist steht er schon unter „Braucht dich“
+      const k = normT(t.line.title).slice(0, 60); if (hidden(k) || heuteSkip.has(k)) continue;
+      return Object.assign(t, { k, g: goalOf(t.panel), action: h.action, noetig: h.noetig }); }
+    return null;
   }
   function compactLage() {
     const root = document.querySelector('#v-heute .md'); if (!root) return;
@@ -1688,7 +1693,7 @@ if (S.cockpit) {
     }
     const t = heuteMoeglich(); const bi = root.querySelector('li[data-bi]'); const anchor = bi ? bi.parentElement : null;
     if (t && anchor) { const kid = 'k' + t.idx; keys.set(kid, C.keyOf(model, t.idx));
-      anchor.insertAdjacentHTML('afterend', '<div class="heutem" data-hk="' + esc(t.k) + '"><span class="hml">💡 Heute möglich' + (t.g < 99 ? ' · Ziel ' + (t.g + 1) + ': ' + esc(GOALS[t.g][0]) : '') + '</span> <b>' + esc(t.line.title.slice(0, 140)) + '</b> <small>' + esc(t.panel) + '</small><br>'
+      anchor.insertAdjacentHTML('afterend', '<div class="heutem" data-hk="' + esc(t.k) + '"><span class="hml">💡 Heute möglich' + (t.g < 99 ? ' · Ziel ' + (t.g + 1) + ': ' + esc(GOALS[t.g][0]) : '') + '</span> <b>' + esc(t.line.title.slice(0, 140)) + '</b> <small>' + esc(t.panel) + '</small><div class="hmwhy"><b>Was:</b> ' + esc(t.action) + '<br><b>Nötig, weil:</b> ' + esc(t.noetig) + '</div>'
         + '<a class="chip okchip" data-hmdo="' + kid + '" title="Frist heute: steht dann unter „Braucht dich“">Heute machen</a> <a class="chip" data-open="' + kid + '">Task öffnen</a> <a class="chip" data-hmskip="' + esc(t.k) + '">Anderer Vorschlag</a> <a class="chip" data-hmhide="' + esc(t.k) + '" title="Diesen Task nie mehr vorschlagen">Ausblenden</a></div>'); }
   }
   document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.id) return; const k = { waFold: 'cockpit-wa-open', secWeek: 'cockpit-week-open' }[d.id] || (d.classList && d.classList.contains('sugcard') ? 'cockpit-sug-open' : ''); if (k) lsSet(k, d.open ? '1' : ''); }, true);
