@@ -201,6 +201,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
   <button id="btnUndated" title="Aktive Tasks ohne Frist, nach Thema (Panel)">Ohne Frist</button>
   <button id="btnFold" title="Alle Panels ein- oder ausklappen">Alle einklappen</button>
   <button id="btnArch">Archiv zeigen</button>
+  <button id="btnNewTask" title="Neuer Task, Panel im Dialog wählen">+ Task</button>
   <button id="btnPanel">+ Panel</button>
   <button id="btnReload" title="board.md neu einlesen">Neu laden</button>
 </div>
@@ -378,7 +379,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     if (f) f.value = value;
     else {
       // Reihenfolge due, tags, note, done beibehalten
-      const order = ['due', 'repeat', 'tags', 'link', 'note', 'done'];
+      const order = ['due', 'repeat', 'tags', 'wait_on', 'wait_since', 'link', 'note', 'done'];   // wait_* wie im Board üblich nach tags (12.11.: wait_since landete sonst vorne)
       const nf = { key, value };
       let at = t.fields.length;
       for (let i = 0; i < t.fields.length; i++) {
@@ -398,7 +399,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 
   // Operationen. Rueckgabe: null = ok, sonst Fehlertext (nichts wurde geaendert).
   // Wartet-Datum (Chris 11.11.): beim Wechsel auf wartet heute vermerken, beim Verlassen entfernen
-  function waitStamp(t, prev) { const has = t.fields.some(x => x.key === 'wait_since' && x.value); if (t.status === 'wait' && prev !== 'wait' && !has) setField(t, 'wait_since', today()); else if ((t.status === 'active' || t.status === 'hold') && has) setField(t, 'wait_since', ''); }   // erledigt behält das Datum, damit Reaktivieren byte-gleich bleibt
+  function waitStamp(t, prev) { const has = t.fields.some(x => x.key === 'wait_since' && x.value); if (t.status === 'wait' && prev !== 'wait' && prev !== 'done' && !has) setField(t, 'wait_since', today()); else if ((t.status === 'active' || t.status === 'hold') && has) setField(t, 'wait_since', ''); }   // erledigt behält das Datum, damit Reaktivieren byte-gleich bleibt
   function applyOp(model, op) {
     const L = model.lines;
     switch (op.type) {
@@ -1045,6 +1046,7 @@ function openNewTask(pre) {
   $('ePos').value = 'top'; $('eArchive').style.display = 'none'; $('eBuddy').style.display = 'none'; $('dlgTask').showModal();
 }
 $('eCancel').onclick = () => { $('dlgTask').close(); editing = null; };
+$('btnNewTask').onclick = () => openNewTask({});   // Chris 12.11.: „+ Task hinzufügen“ fehlt bei eingeklappten Panels
 $('dlgTask').addEventListener('close', () => { editing = null; });
 $('fTask').onsubmit = e => {
   e.preventDefault(); if (!editing) return;
@@ -1375,7 +1377,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '57544cbd23';
+  const BUILD = '382a6b9f0e';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -2314,7 +2316,6 @@ if (S.cockpit) {
   async function learnSent() {
     if (st.learnBusy || !S.api) return; st.learnBusy = true; const upd = {};
     try {
-      let sentId = ''; try { sentId = (await S.api('/me/mailFolders/sentitems?$select=id')).id || ''; } catch (e) { return; }
       const cands = [];
       Object.keys(st.dec).forEach(k => { const d = st.dec[k]; if (/^draft:/.test(k) && d && d.buddy && !d.level) cands.push({ key: k, imid: k.slice(6), at: d.at, buddy: d.buddy, edited: d.sent, to: d.to, conv: d.conv }); });
       Object.values(st.triage || {}).forEach(t => { if (t && t.draftText && t.id && !st.dec['draft:' + t.id] && !st.dec['learn:' + t.id]) { const m = st.mails.find(x => x.internetMessageId === t.id); cands.push({ key: 'learn:' + t.id, imid: t.id, at: (m && m.receivedDateTime) || st.triageDate, buddy: t.draftText, to: m ? fromAddr(m) : '', conv: m && m.conversationId, own: true }); } });
@@ -2322,8 +2323,8 @@ if (S.cockpit) {
         try {
           let conv = c.conv; if (!conv) { const r = await S.api("/me/messages?$filter=internetMessageId eq '" + c.imid.replace(/'/g, "''") + "'&$select=conversationId&$top=1"); conv = r.value && r.value[0] && r.value[0].conversationId; }
           if (!conv) continue;
-          const r = await S.api("/me/messages?$filter=conversationId eq '" + conv.replace(/'/g, "''") + "'&$select=parentFolderId,sentDateTime,uniqueBody,toRecipients,isDraft&$top=25");
-          const sent = (r.value || []).filter(x => x.parentFolderId === sentId && !x.isDraft && Date.parse(x.sentDateTime) > Date.parse(c.at || 0)).sort((a, b) => (a.sentDateTime < b.sentDateTime ? -1 : 1))[0];
+          const r = await S.api("/me/mailFolders/sentitems/messages?$filter=conversationId eq '" + conv.replace(/'/g, "''") + "'&$select=sentDateTime,uniqueBody,toRecipients&$top=50");   // nur Gesendet: lange Verläufe sprengen sonst das Limit (live 12.11.)
+          const sent = (r.value || []).filter(x => Date.parse(x.sentDateTime) > Date.parse(c.at || 0)).sort((a, b) => (a.sentDateTime < b.sentDateTime ? -1 : 1))[0];
           const age = (Date.now() - Date.parse(c.at || 0)) / 864e5;
           if (!sent) { if (age > 7 && !c.own) upd[c.key] = Object.assign({}, st.dec[c.key], { level: 'nicht gesendet', checkedAt: new Date().toISOString() }); continue; }
           const fin = htmlText(sent.uniqueBody && sent.uniqueBody.content).slice(0, 3000); const v = simText(c.buddy, fin);
