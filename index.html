@@ -77,7 +77,7 @@ a.calnk{ display:flex; align-items:center; gap:10px; text-decoration:none; color
 .prow:hover{ background:var(--acc2); } .pn{ font-size:12px; color:var(--ink3); font-weight:700; min-width:28px; } .pt{ flex:1; font-size:13.5px; min-width:0; }
 .pt small{ display:block; font-size:11.5px; color:var(--ink3); }
 /* Mails */
-.msearch{ display:flex; gap:8px; margin-bottom:10px; } .msearch input{ flex:1; font:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--line2); border-radius:10px; background:var(--card); color:var(--ink); }
+.msearch{ display:flex; gap:8px; margin-bottom:10px; } .qhide{ display:none !important; } .msearch input{ flex:1; font:inherit; font-size:14px; padding:9px 12px; border:1px solid var(--line2); border-radius:10px; background:var(--card); color:var(--ink); }
 .mhint{ font-size:12px; color:var(--ink3); margin:0 2px 10px; }
 .mgroup{ background:var(--card); border:1px solid var(--line); border-radius:14px; box-shadow:var(--shadow); margin-bottom:12px; overflow:hidden; }
 .mgroup summary{ display:flex; align-items:center; gap:10px; padding:12px 16px; cursor:pointer; list-style:none; }
@@ -206,9 +206,9 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
 </div>
 <section id="v-tasks" class="view"><div class="grid" id="grid"></div>
 <div class="foot" id="foot"></div></section>
-<section id="v-heute" class="view" style="display:none"></section>
+<section id="v-heute" class="view" style="display:none"><div class="msearch"><input type="search" id="hSearch" placeholder="Auf Heute suchen (Lage, Termine, Vorschläge, Fälliges)"><span class="cs" id="hCount" style="align-self:center"></span></div><div id="hbody"></div></section>
 <section id="v-mails" class="view" style="display:none"><div class="msearch"><input type="search" id="mq" placeholder="Alle Mails im Posteingang durchsuchen (Betreff, Absender, Text)"></div><div id="mlist"></div></section>
-<section id="v-portfolio" class="view" style="display:none"></section>
+<section id="v-portfolio" class="view" style="display:none"><div class="msearch"><input type="search" id="pSearch" placeholder="Im Portfolio suchen (Firma, Dokument, Stichwort)"><span class="cs" id="pCount" style="align-self:center"></span></div><div id="pbody"></div></section>
 <section id="v-links" class="view" style="display:none"></section>
 
 <dialog id="dlgTask"><form method="dialog" class="dlg" id="fTask">
@@ -1368,7 +1368,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '80a9c3f086';
+  const BUILD = '77ba431aec';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1601,7 +1601,7 @@ if (S.cockpit) {
           + topicChips(topicOf(x.title + ' ' + (x.why || '')), 'Hinweis zu „' + x.title + '“.', true) + '<button class="primary" data-hacc="' + esc(x.id) + '">' + (x.action === 'done' ? 'Abhaken' : 'Frist setzen') + '</button><button data-hhold="' + esc(x.id) + '" title="Task bleibt im Board, aber pausiert (On-Hold), Frist bleibt">On-Hold</button><button data-hrej="' + esc(x.id) + '">Verwerfen</button>' + talk(x, (x.action === 'done' ? 'Task abhaken' : 'Frist auf ' + (x.due || '?') + ' setzen') + ': „' + x.title + '“') + '</span></div>').join('')
         + '</details>';
     }
-    $('v-heute').innerHTML = jobsCard() + v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
+    $('hbody').innerHTML = jobsCard() + v + '<div class="cols">' + b + '<div class="stack">' + c + d + '</div></div>';
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { const key = bkey(li.dataset.bi);
       const struck = /^\s*(gestrichen|erledigt|entf(ä|ae)llt|hinfällig)\b/i.test(li.textContent); if (struck) li.dataset.struck = '1';   // gestrichener Punkt: keine Mails, kein Thema (Chris 23.10.)
       let linked = struck ? [] : Object.values(st.triage).filter(x => [].concat(x.brief || []).includes(key));
@@ -2169,7 +2169,7 @@ if (S.cockpit) {
       + (st.registerUrl && !st.pf ? '<a class="btn" href="' + esc(st.registerUrl) + '" target="_blank" rel="noopener">Register öffnen</a>' : '') + '</div>';
     h += rows.length ? rows.map(t => { const id = 'k' + t.idx; keys.set(id, C.keyOf(model, t.idx)); const d = field(t.line, 'due');
       return '<div class="prow' + (t.line.status === 'hold' ? ' paused' : '') + '" data-open="' + id + '"><span class="pn">' + t.num + '/</span><span class="pt">' + esc(t.line.title) + '</span>' + chipsHtml(t.line) + (t.line.status === 'hold' ? '<span class="hold">On-Hold</span>' : t.line.status === 'wait' ? '<span class="wait">' + esc(waitLabel(t.line)) + '</span>' : (d ? '<span class="due">' + esc(fmtDue(d)) + '</span>' : '')) + '</div>'; }).join('') : '<div class="empty">Kein Panel „Portfolio“ im Board.</div>';
-    $('v-portfolio').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
+    $('pbody').innerHTML = pfHtml() + '<div style="margin-top:14px">' + h + '</section></div>';
   }
   function paintLinks() {
     const chipOf = (t, n) => { const sid = sessId(n); return sid ? chatChip(t.id, n, claudeLink('cowork/' + sid), 'Bestehende Sitzung öffnen') : chatChip(t.id, n, claudeLink('project/' + st.themen.buddyProject), 'Kein Direktlink bekannt: öffnet das Projekt Buddy, Sitzung dort in der Liste'); };
@@ -2190,6 +2190,19 @@ if (S.cockpit) {
     const c = $('lCount'); if (c) c.textContent = q.length ? n + ' Treffer' : '';
   }
   document.addEventListener('input', e => { if (e.target && e.target.id === 'lSearch') { st.lq = e.target.value; filterLinks(); } });
+  // Stichwortsuche auf Heute (Chris 12.11.), Feld wie im Reiter Mails; Filter wirkt nach jedem Neuaufbau von #hbody
+  function filterBody(bodyId, qs, countId) {   // Suchtreffer per Klasse .qhide, damit andere Ausblendungen (erledigt, Wartet) unberührt bleiben
+    const q = (qs || '').toLowerCase().split(/\s+/).filter(Boolean); const B = $(bodyId); if (!B) return;
+    let n = 0; const sel = 'li, .ev, .prow, .mail, tbody tr';
+    [...B.querySelectorAll(sel)].forEach(el => { const hit = !q.length || q.every(w => el.textContent.toLowerCase().includes(w)); el.classList.toggle('qhide', !hit); if (hit && q.length && el.style.display !== 'none') { n++; let p = el.parentElement; while (p && p !== B) { if (p.tagName === 'DETAILS') p.open = true; p.classList.remove('qhide'); p = p.parentElement; } } });
+    B.querySelectorAll('section.card, details.card').forEach(c => { const any = [...c.querySelectorAll(sel)].some(x => !x.classList.contains('qhide')); c.classList.toggle('qhide', !!q.length && !any); });
+    const cnt = $(countId); if (cnt) cnt.textContent = q.length ? n + ' Treffer' : ''; }
+  function filterHeute() { filterBody('hbody', st.hq, 'hCount'); }
+  function filterPortfolio() { filterBody('pbody', st.pq, 'pCount'); }
+  document.addEventListener('input', e => { if (e.target && e.target.id === 'hSearch') { st.hq = e.target.value; filterHeute(); } });
+  document.addEventListener('input', e => { if (e.target && e.target.id === 'pSearch') { st.pq = e.target.value; filterPortfolio(); } });
+  { const _ph = paintHeute; paintHeute = function () { _ph.apply(this, arguments); try { filterHeute(); } catch (e) { /* Suche darf Heute nie blockieren */ } }; }
+  { const _pp = paintPortfolio; paintPortfolio = function () { _pp.apply(this, arguments); try { filterPortfolio(); } catch (e) { /* Suche darf Portfolio nie blockieren */ } }; }
   function paint() { kpis(); paintHeute(); paintMails(); paintPortfolio(); if (!(document.activeElement && document.activeElement.id === 'lSearch')) paintLinks(); filterLinks(); }
 
   // ---- Lage-Punkt -> zugehoerige Mails (Buddy verknuepft in mail-triage.json per "brief": "JJJJ-MM-TT#N") ----
