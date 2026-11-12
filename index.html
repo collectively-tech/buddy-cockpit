@@ -1377,7 +1377,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '382a6b9f0e';
+  const BUILD = '066b009b65';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1399,7 +1399,7 @@ if (S.cockpit) {
     if (st.jobsGh) mergeJobs(st.jobsGh);
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
-    if (!st.learnTried) { st.learnTried = true; setTimeout(() => learnSent().catch(e => console.log('learnSent', e && e.message)), 4000); }   // einmal pro Sitzung, im Hintergrund
+    setTimeout(() => learnSent().catch(e => console.log('learnSent', e && e.message)), 4000);   // nach jedem Laden im Hintergrund, je Mail höchstens alle 10 Min.
     if (pending()) pollGh(); else autoRun();
   }
   const ghReq = () => lsGet('cockpit-gh-req');
@@ -2319,7 +2319,8 @@ if (S.cockpit) {
       const cands = [];
       Object.keys(st.dec).forEach(k => { const d = st.dec[k]; if (/^draft:/.test(k) && d && d.buddy && !d.level) cands.push({ key: k, imid: k.slice(6), at: d.at, buddy: d.buddy, edited: d.sent, to: d.to, conv: d.conv }); });
       Object.values(st.triage || {}).forEach(t => { if (t && t.draftText && t.id && !st.dec['draft:' + t.id] && !st.dec['learn:' + t.id]) { const m = st.mails.find(x => x.internetMessageId === t.id); cands.push({ key: 'learn:' + t.id, imid: t.id, at: (m && m.receivedDateTime) || st.triageDate, buddy: t.draftText, to: m ? fromAddr(m) : '', conv: m && m.conversationId, own: true }); } });
-      for (const c of cands.slice(0, 12)) {
+      st.learnSeen = st.learnSeen || {}; const now = Date.now();
+      for (const c of cands.filter(c => !(st.learnSeen[c.key] > now - 6e5)).slice(0, 12)) { st.learnSeen[c.key] = now;
         try {
           let conv = c.conv; if (!conv) { const r = await S.api("/me/messages?$filter=internetMessageId eq '" + c.imid.replace(/'/g, "''") + "'&$select=conversationId&$top=1"); conv = r.value && r.value[0] && r.value[0].conversationId; }
           if (!conv) continue;
@@ -2329,7 +2330,7 @@ if (S.cockpit) {
           if (!sent) { if (age > 7 && !c.own) upd[c.key] = Object.assign({}, st.dec[c.key], { level: 'nicht gesendet', checkedAt: new Date().toISOString() }); continue; }
           const fin = htmlText(sent.uniqueBody && sent.uniqueBody.content).slice(0, 3000); const v = simText(c.buddy, fin);
           upd[c.key] = Object.assign({}, st.dec[c.key] || { status: 'learned', buddy: String(c.buddy).slice(0, 3000), to: c.to, own: true }, { final: fin, finalAt: sent.sentDateTime, sim: v, level: simLevel(v), finalTo: (sent.toRecipients || []).map(a => a.emailAddress && a.emailAddress.address).filter(Boolean).join(', ') });
-        } catch (e) { /* einzelne Mail überspringen */ }
+        } catch (e) { console.log('learnSent', c.key.slice(0, 40), e && e.message); }
       }
       if (Object.keys(upd).length) { Object.assign(st.dec, upd);
         const cur = await S.readPath(P.decisions).catch(() => null); let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
