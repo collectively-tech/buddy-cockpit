@@ -489,7 +489,7 @@ dialog::backdrop{ background:rgba(10,14,20,.45); }
     return 'Unbekannte Operation';
   }
 
-  root.TBCore = { parse, serialize, view, applyOp, keyOf, clean, nextDue };
+  root.TBCore = { parse, serialize, view, applyOp, keyOf, clean, nextDue, findTask };
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>window.TB_CONFIG = {"clientId": "e0623805-5ed8-4c9c-810f-89142a25bd02", "tenantId": "742d31f0-26eb-4f55-b84e-a6212d234a0e", "path": "AI-CoS/tasks/board.md", "coworkFolder": "/Users/chris/Library/CloudStorage/OneDrive-BHC/AI-CoS"};</script>
@@ -578,11 +578,12 @@ class En{constructor(e,t,r,n,o,i,a,s){this.canonicalAuthority=e,this._canonicalA
     const h = Object.assign({ Authorization: 'Bearer ' + await token() }, headers || {});
     const u = url.startsWith('http') ? url : G + url;
     if (method !== 'GET') return fetch(u, { method, headers: h, body });
-    // Lesen: bei 429/502/503/504 oder Netzfehler bis 3x nachfassen (Chris 09.11.: kurzer 503 von Microsoft legte die Mails lahm)
+    // Lesen: bei 429/502/503/504 oder Netzfehler bis 5x nachfassen, Wartezeit wächst (Chris 09.11. 503, 12.11. 504: „forever fixen“)
+    const WAIT = (typeof window !== 'undefined' && window.__graphWait) || [1, 3, 6, 10, 15];
     for (let n = 0; ; n++) {
-      let r = null; try { r = await fetch(u, { method, headers: h, body }); } catch (e) { if (n >= 3) throw e; }
-      if (r && (![429, 502, 503, 504].includes(r.status) || n >= 3)) return r;
-      const ra = r && r.headers && r.headers.get ? +r.headers.get('Retry-After') : 0; await new Promise(res => setTimeout(res, Math.min(10, ra > 0 ? ra : [1, 3, 6][n]) * 1000));
+      let r = null; try { r = await fetch(u, { method, headers: h, body }); } catch (e) { if (n >= WAIT.length) throw e; }
+      if (r && (![429, 502, 503, 504].includes(r.status) || n >= WAIT.length)) return r;
+      const ra = r && r.headers && r.headers.get ? +r.headers.get('Retry-After') : 0; await new Promise(res => setTimeout(res, Math.min(20, ra > 0 ? ra : WAIT[n]) * 1000));
     }
   }
   const enc = p => p.split('/').map(encodeURIComponent).join('/');
@@ -1319,12 +1320,18 @@ if (S.cockpit) {
 
   async function loadMails() {
     // ALLE Mails im Posteingang, seitenweise (100 je Abruf), nur Kopfdaten
-    const [box, all] = await Promise.all([
-      S.api('/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount'),
-      S.apiAll('/me/mailFolders/inbox/messages?$top=100&$orderby=receivedDateTime desc'
-        + '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag,conversationId'
-        + "&$expand=singleValueExtendedProperties($filter=id eq 'SystemTime 0x0F01')")   // angeheftet in Outlook = PidTagRenewTime 4500-09-01 (live geprüft 02.11.)
-    ]);
+    // Robust gegen Microsoft-Aussetzer (Chris 12.11.: 504 „forever fixen“): 1) volle Abfrage, 2) leichtere ohne Anheft-Info,
+    // 3) letzte geladene Liste behalten und nur einen Hinweis zeigen. Fehlermeldung nur, wenn nie etwas geladen wurde.
+    const SEL = '&$select=subject,from,receivedDateTime,bodyPreview,isRead,webLink,importance,hasAttachments,internetMessageId,flag,conversationId';
+    const PIN = "&$expand=singleValueExtendedProperties($filter=id eq 'SystemTime 0x0F01')";   // angeheftet in Outlook = PidTagRenewTime 4500-09-01 (live geprüft 02.11.)
+    let box = null, all = null; st.mailsStale = '';
+    try { [box, all] = await Promise.all([S.api('/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount'), S.apiAll('/me/mailFolders/inbox/messages?$top=100&$orderby=receivedDateTime desc' + SEL + PIN)]); }
+    catch (e1) {
+      try { [box, all] = await Promise.all([S.api('/me/mailFolders/inbox?$select=totalItemCount,unreadItemCount').catch(() => st.inbox), S.apiAll('/me/mailFolders/inbox/messages?$top=50&$orderby=receivedDateTime desc' + SEL)]);
+        const pinOld = new Set((st.mails || []).filter(m => m.pinned).map(m => m.id)); all.forEach(m => { if (pinOld.has(m.id)) m.singleValueExtendedProperties = [{ value: '4500-09-01' }]; }); }
+      catch (e2) { if (st.mails && st.mails.length) { st.mailsStale = 'Microsoft antwortet gerade nicht (' + e2.message.replace(/^Microsoft antwortet /, '') + '), du siehst den Stand von ' + new Date(st.mailsAt || Date.now()).toLocaleTimeString('de-CH', { hour: '2-digit', minute: '2-digit' }) + '. Nächster Versuch automatisch.'; setTimeout(() => loadAll(), 60000); return; } throw e2; }
+    }
+    st.mailsAt = Date.now();
     all.forEach(m => { m.pinned = (m.singleValueExtendedProperties || []).some(p => String(p.value) >= '3000'); });
     st.inbox = box; st.mails = all;
     st.triage = {}; st.triageDate = null;
@@ -1368,7 +1375,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = 'ba5d1693b3';
+  const BUILD = '57544cbd23';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1390,6 +1397,7 @@ if (S.cockpit) {
     if (st.jobsGh) mergeJobs(st.jobsGh);
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
+    if (!st.learnTried) { st.learnTried = true; setTimeout(() => learnSent().catch(e => console.log('learnSent', e && e.message)), 4000); }   // einmal pro Sitzung, im Hintergrund
     if (pending()) pollGh(); else autoRun();
   }
   const ghReq = () => lsGet('cockpit-gh-req');
@@ -1694,9 +1702,19 @@ if (S.cockpit) {
     const t = heuteMoeglich(); const bi = root.querySelector('li[data-bi]'); const anchor = bi ? bi.parentElement : null;
     if (t && anchor) { const kid = 'k' + t.idx; keys.set(kid, C.keyOf(model, t.idx));
       anchor.insertAdjacentHTML('afterend', '<div class="heutem" data-hk="' + esc(t.k) + '"><span class="hml">💡 Heute möglich' + (t.g < 99 ? ' · Ziel ' + (t.g + 1) + ': ' + esc(GOALS[t.g][0]) : '') + '</span> <b>' + esc(t.line.title.slice(0, 140)) + '</b> <small>' + esc(t.panel) + '</small><div class="hmwhy"><b>Was:</b> ' + esc(t.action) + '<br><b>Nötig, weil:</b> ' + esc(t.noetig) + '</div>'
-        + '<a class="chip okchip" data-hmdo="' + kid + '" title="Frist heute: steht dann unter „Braucht dich“">Heute machen</a> <a class="chip" data-open="' + kid + '">Task öffnen</a> <a class="chip" data-hmskip="' + esc(t.k) + '">Anderer Vorschlag</a> <a class="chip" data-hmhide="' + esc(t.k) + '" title="Diesen Task nie mehr vorschlagen">Ausblenden</a></div>'); }
+        + (/ja oder nein/i.test(t.line.title + ' ' + (t.action || '')) ? '<a class="chip okchip" data-hmyn="ja" data-k="' + kid + '" title="Entscheid Ja: Task erledigt, Begründung in der Notiz">Ja ✓</a> <a class="chip" data-hmyn="nein" data-k="' + kid + '" title="Entscheid Nein: Task erledigt, Begründung in der Notiz">Nein ✗</a> ' : '') + '<a class="chip okchip" data-hmdo="' + kid + '" title="Frist heute: steht dann unter „Braucht dich“">Heute machen</a> <a class="chip" data-open="' + kid + '">Task öffnen</a> <a class="chip" data-hmskip="' + esc(t.k) + '">Anderer Vorschlag</a> <a class="chip" data-hmhide="' + esc(t.k) + '" title="Diesen Task nie mehr vorschlagen">Ausblenden</a></div>'); }
   }
   document.addEventListener('toggle', e => { const d = e.target; if (!d || !d.id) return; const k = { waFold: 'cockpit-wa-open', secWeek: 'cockpit-week-open' }[d.id] || (d.classList && d.classList.contains('sugcard') ? 'cockpit-sug-open' : ''); if (k) lsSet(k, d.open ? '1' : ''); }, true);
+  // Ja/Nein-Entscheid direkt im Vorschlag (Chris 12.11.: Matt Lloyd, wollte Nein sagen, ging nicht)
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-hmyn]'); if (!b) return; e.preventDefault(); e.stopPropagation();
+    const k = keys.get(b.dataset.k); if (!k) return; const yes = b.dataset.hmyn === 'ja';
+    const r = window.prompt((yes ? 'Ja' : 'Nein') + ': kurze Begründung (optional)', ''); if (r === null) return; const why = r.trim();   // Abbrechen = nichts tun
+    const i = C.findTask(model, k); const l = i >= 0 ? model.lines[i] : null; if (!l) { setStatus('Task nicht gefunden', 'err'); return; } const old = field(l, 'note');
+    const d = new Date(); const dd = String(d.getDate()).padStart(2, '0') + '.' + String(d.getMonth() + 1).padStart(2, '0') + '.';
+    b.textContent = 'Wird gespeichert …';
+    const ok1 = await commit({ type: 'edit', key: k, note: (dd + ' Entscheid ' + (yes ? 'JA' : 'NEIN') + ' (Chris)' + (why ? ': ' + why : '') + '. ' + old).trim() });
+    const j = ok1 ? model.lines.findIndex(x => x && x.title === l.title && x.status === l.status) : -1; const ok2 = j >= 0 && await commit({ type: 'status', key: C.keyOf(model, j), status: 'done' });   // Schlüssel nach dem Edit neu bestimmen
+    if (ok2) toast('Entschieden: ' + (yes ? 'Ja' : 'Nein') + '. Task erledigt.'); paintHeute(); }, true);
   document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-hmdo],[data-hmskip],[data-hmhide]'); if (!b) return; e.preventDefault(); e.stopPropagation();
     if (b.dataset.hmdo) { const k = keys.get(b.dataset.hmdo); if (!k) return; b.textContent = 'Wird gespeichert …'; const ok = await commit({ type: 'edit', key: k, due: tdyS() }); if (ok) toast('Frist heute: steht jetzt unter „Braucht dich“.'); }
     else if (b.dataset.hmskip) heuteSkip.add(b.dataset.hmskip);
@@ -2100,7 +2118,7 @@ if (S.cockpit) {
   }
   function paintMails() {
     setTimeout(fillHints, 0);
-    if (st.err.mails) { $('v-mails').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '</div>'; return; }
+    if (st.err.mails) { $('mlist').innerHTML = '<div class="errbox">Mails nicht lesbar: ' + esc(st.err.mails) + '. Nächster Versuch in einer Minute.</div>'; if (!st.mailRetryT) st.mailRetryT = setTimeout(() => { st.mailRetryT = null; loadAll(); }, 60000); return; }   // ins #mlist, damit das Suchfeld bleibt
     if (st.focus) {
       const fm = st.mails.filter(m => st.focus.ids.has(m.id));
       $('mlist').innerHTML = '<div class="focusbar"><span><b>Zu Buddys Lage</b> · ' + esc(st.focus.label) + ' · ' + fm.length + ' Mail' + (fm.length > 1 ? 's' : '') + '</span><button id="btnAllMails">Alle Mails anzeigen</button></div>'
@@ -2146,7 +2164,7 @@ if (S.cockpit) {
     const open = lsGet('cockpit-open') ? JSON.parse(lsGet('cockpit-open')) : {};
     const isOpen = (k, d) => (k in open ? open[k] : d);
     $('mlist').innerHTML = '<div class="mfilter">' + (S.createNewDraft ? '<button data-newmail="1" data-subj="">✉ Neue Mail</button> ' : '') + (st.unreadOnly ? '<button id="btnUnread" class="primary" title="Filter aufheben, alle Mails zeigen">Nur ungelesene (' + nUnread + ') ✕</button> ' : '') + '<button id="btnAtt" class="' + (st.attOnly ? 'primary' : '') + '" aria-pressed="' + (st.attOnly ? 'true' : 'false') + '" title="Nur Mails mit Anhang. Mit Suchbegriff wird zusätzlich in allen Ordnern nach Anhang-Namen gesucht.">' + (st.attOnly ? '📎 Nur mit Anhang (' + nAtt + ') · alle zeigen' : '📎 Nur mit Anhang (' + nAtt + ')') + '</button>' + ' <button id="btnPin" class="' + (st.pinOnly ? 'primary' : '') + '" aria-pressed="' + (st.pinOnly ? 'true' : 'false') + '" title="Nur Mails, die du in Outlook angeheftet hast">📌 ' + (st.pinOnly ? 'Nur angeheftete (' + nPin + ') · alle zeigen' : 'Angeheftet (' + nPin + ')') + '</button>' + (nSafe ? ' <button id="btnNxAll" class="primary" title="Übernimmt alle sicheren Vorschläge: gelesen, ablegen, erledigt. Antworten und Tasks nie automatisch.">💡 ' + nSafe + ' sichere Vorschläge übernehmen' + (st.unreadOnly || st.attOnly || q ? ' (gefilterte Liste)' : '') + '</button>' : '') + '</div>'
-      + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' + (nQ - list.length ? ', ' + (nQ - list.length) + ' durch Filter ausgeblendet (' + [st.unreadOnly && 'Nur ungelesene', st.attOnly && 'Anhänge', st.pinOnly && 'Angeheftet'].filter(Boolean).join(', ') + ')' : '') : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
+      + (st.mailsStale ? '<div class="errbox" style="background:transparent">' + esc(st.mailsStale) + '</div>' : '') + '<div class="mhint">' + st.mails.length + ' Mails im Posteingang geladen' + (q ? ', ' + list.length + ' Treffer' + (nQ - list.length ? ', ' + (nQ - list.length) + ' durch Filter ausgeblendet (' + [st.unreadOnly && 'Nur ungelesene', st.attOnly && 'Anhänge', st.pinOnly && 'Angeheftet'].filter(Boolean).join(', ') + ')' : '') : '') + ' · ' + td + (st.err.triage ? ' · ' + esc(st.err.triage) : '') + '</div>'
       + hitsHtml + ftHtml + (q ? '' : waitHtml())
       + sec('needs', 'Braucht dich', 'Entscheid oder Antwort von dir', isOpen('needs', true))
       + sec('neu', 'Neu, nicht eingeordnet', 'seit Buddys letztem Lauf', isOpen('neu', true))
@@ -2287,6 +2305,37 @@ if (S.cockpit) {
     return '<a class="btn ghost" href="' + esc(buddyUrl(ctx)) + '" target="_blank" rel="noopener" title="Neuer Chat mit Buddy zu diesem Vorschlag, dein Auftrag am Ende ergänzen">Neuer Chat zum Vorschlag</a>';
   }
   function pollGh() { if (st.pollT) return; st.pollT = setTimeout(async () => { st.pollT = null; await loadAll(); if (pending()) pollGh(); }, 20e3); }
+  // Lernen aus dem, was wirklich gesendet wurde (Chris 12.11.): Buddy-Vorschlag vs. gesendete Mail im selben Verlauf.
+  // Misst im Code (Ähnlichkeit, Stufe), die Routine leitet daraus Stil pro Empfänger ab (Motor 7y). Schreibt nur in decisions.json.
+  const htmlText = h => String(h || '').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<br\s*\/?>|<\/p>|<\/div>/gi, '\n').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;|&rsquo;/g, "'").replace(/[ \t]+/g, ' ').split('\n').map(x => x.trim()).filter(Boolean).join('\n');
+  function simText(a, b) { const bg = t => { const w = String(t || '').toLowerCase().match(/[\wäöüéèà']+/g) || []; const s = new Map(); for (let i = 0; i < w.length - 1; i++) { const k = w[i] + ' ' + w[i + 1]; s.set(k, (s.get(k) || 0) + 1); } return { s, n: Math.max(w.length - 1, 0) }; };
+    const A = bg(a), B = bg(b); if (!A.n || !B.n) return 0; let x = 0; A.s.forEach((v, k) => { x += Math.min(v, B.s.get(k) || 0); }); return Math.round(200 * x / (A.n + B.n)) / 100; }
+  const simLevel = v => v >= 0.9 ? 'unverändert' : v >= 0.6 ? 'leicht angepasst' : v >= 0.3 ? 'stark angepasst' : 'neu geschrieben';
+  async function learnSent() {
+    if (st.learnBusy || !S.api) return; st.learnBusy = true; const upd = {};
+    try {
+      let sentId = ''; try { sentId = (await S.api('/me/mailFolders/sentitems?$select=id')).id || ''; } catch (e) { return; }
+      const cands = [];
+      Object.keys(st.dec).forEach(k => { const d = st.dec[k]; if (/^draft:/.test(k) && d && d.buddy && !d.level) cands.push({ key: k, imid: k.slice(6), at: d.at, buddy: d.buddy, edited: d.sent, to: d.to, conv: d.conv }); });
+      Object.values(st.triage || {}).forEach(t => { if (t && t.draftText && t.id && !st.dec['draft:' + t.id] && !st.dec['learn:' + t.id]) { const m = st.mails.find(x => x.internetMessageId === t.id); cands.push({ key: 'learn:' + t.id, imid: t.id, at: (m && m.receivedDateTime) || st.triageDate, buddy: t.draftText, to: m ? fromAddr(m) : '', conv: m && m.conversationId, own: true }); } });
+      for (const c of cands.slice(0, 12)) {
+        try {
+          let conv = c.conv; if (!conv) { const r = await S.api("/me/messages?$filter=internetMessageId eq '" + c.imid.replace(/'/g, "''") + "'&$select=conversationId&$top=1"); conv = r.value && r.value[0] && r.value[0].conversationId; }
+          if (!conv) continue;
+          const r = await S.api("/me/messages?$filter=conversationId eq '" + conv.replace(/'/g, "''") + "'&$select=parentFolderId,sentDateTime,uniqueBody,toRecipients,isDraft&$top=25");
+          const sent = (r.value || []).filter(x => x.parentFolderId === sentId && !x.isDraft && Date.parse(x.sentDateTime) > Date.parse(c.at || 0)).sort((a, b) => (a.sentDateTime < b.sentDateTime ? -1 : 1))[0];
+          const age = (Date.now() - Date.parse(c.at || 0)) / 864e5;
+          if (!sent) { if (age > 7 && !c.own) upd[c.key] = Object.assign({}, st.dec[c.key], { level: 'nicht gesendet', checkedAt: new Date().toISOString() }); continue; }
+          const fin = htmlText(sent.uniqueBody && sent.uniqueBody.content).slice(0, 3000); const v = simText(c.buddy, fin);
+          upd[c.key] = Object.assign({}, st.dec[c.key] || { status: 'learned', buddy: String(c.buddy).slice(0, 3000), to: c.to, own: true }, { final: fin, finalAt: sent.sentDateTime, sim: v, level: simLevel(v), finalTo: (sent.toRecipients || []).map(a => a.emailAddress && a.emailAddress.address).filter(Boolean).join(', ') });
+        } catch (e) { /* einzelne Mail überspringen */ }
+      }
+      if (Object.keys(upd).length) { Object.assign(st.dec, upd);
+        const cur = await S.readPath(P.decisions).catch(() => null); let d = {}; try { d = cur && cur.text ? JSON.parse(cur.text) : {}; } catch (e) { d = {}; }
+        d.items = Object.assign(d.items || {}, upd); await S.writePath(P.decisions, JSON.stringify(d, null, 1)); }
+    } finally { st.learnBusy = false; }
+  }
+  window.__simText = simText; window.__htmlText = htmlText;   // für den Test
   async function afterGh() {   // Lauf fertig: Issue schliessen, gesendete Mails ins Board spiegeln (mit Sicherung über commit)
     const n = lsGet('cockpit-gh-issue');
     if (n && ghReq() && !pending()) { try { await gh('PATCH', '/issues/' + n, { state: 'closed' }); } catch (e) { /* bleibt offen, harmlos */ } lsSet('cockpit-gh-issue', ''); }
@@ -2470,7 +2519,7 @@ if (S.cockpit) {
     try {
       const d = await S.createReplyDraft(m.id, text); delete drEdit[m.id]; keepIds.add(m.id);
       if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook');
-      await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink, buddy: String(tr.draftText || '').slice(0, 3000), sent: text.slice(0, 3000), to: fromAddr(m) });   // Stil lernen: Retro vergleicht buddy mit sent (Chris 09.11.)
+      await decide('draft:' + m.internetMessageId, 'created', { link: d.webLink, buddy: String(tr.draftText || '').slice(0, 3000), sent: text.slice(0, 3000), to: fromAddr(m), conv: m.conversationId || '' });   // Stil lernen: Retro vergleicht buddy mit sent (Chris 09.11.)
       toast('Entwurf ist in Outlook offen: prüfen und senden. Die Mail bleibt hier mit „Entwurf öffnen ↗“.'); paintMails(); paintHeute();
     } catch (err) { if (win) win.close(); md.disabled = false; md.textContent = 'Ok, als Entwurf in Outlook'; setStatus(err.message, 'err'); }
   });
