@@ -1368,7 +1368,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '77ba431aec';
+  const BUILD = 'b04dddf5b9';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1808,13 +1808,27 @@ if (S.cockpit) {
     return sc.length && sc[0].n >= 2 && (!sc[1] || sc[1].n < sc[0].n) ? sc[0].x : null;
   }
   const ST_LBL = { active: 'Aktiv', wait: 'Wartet', hold: 'On-Hold', done: 'Task erledigt' };
+  function taskMailId(u) { const m = /[?&]ItemID=([^&]+)/i.exec(u || ''); if (!m) return ''; let id = m[1]; try { id = decodeURIComponent(id); } catch (e) { return ''; } return id.replace(/\//g, '-').replace(/\+/g, '_'); }   // OWA-Link → Graph-ID
+  window.__taskMailId = taskMailId;   // für den Test
+  async function newestInThread(id) { try { const m = await S.api('/me/messages/' + encodeURIComponent(id) + '?$select=id,conversationId'); if (!m.conversationId) return m.id || id;
+      const r = await S.api("/me/messages?$filter=conversationId eq '" + m.conversationId.replace(/'/g, "''") + "'&$select=id,receivedDateTime,isDraft&$top=50");
+      const l = (r.value || []).filter(x => !x.isDraft).sort((a, b) => (a.receivedDateTime < b.receivedDateTime ? 1 : -1)); return (l[0] && l[0].id) || m.id || id; } catch (e) { return id; } }
+  document.addEventListener('click', async e => { const b = e.target.closest && e.target.closest('[data-trep]'); if (!b) return; e.preventDefault(); e.stopPropagation(); if (b.dataset.busy) return;
+    const all = b.dataset.all === '1', win = window.open('', 'outlook'); b.dataset.busy = '1'; const lbl = b.textContent; b.textContent = 'Lege Entwurf an …';
+    try { const id = await newestInThread(b.dataset.trep); const d = all ? await S.createReplyAllDraft(id, '') : await S.createReplyDraft(id, '');
+      if (win) win.location.href = d.webLink; else window.open(d.webLink, 'outlook'); toast((all ? 'Antwort an alle' : 'Antwort') + ' liegt als Entwurf in Outlook offen (nicht gesendet)'); }
+    catch (err) { if (win) win.close(); setStatus('Antwort-Entwurf nicht angelegt: ' + err.message, 'err'); }
+    b.textContent = lbl; delete b.dataset.busy; }, true);
   function addStatusChips() {
     document.querySelectorAll('#v-heute li[data-bi], #v-heute li[data-wa]').forEach(li => { if (li.querySelector('[data-pst]') || li.dataset.struck) return;
       const b = li.querySelector(':scope > b, :scope > strong'); const title = ((b && b.textContent) || ownText(li).split(/(?<=\.)\s/)[0]).replace(/[.:]\s*$/, '').trim();
       const t = taskForPoint(title); if (!t) return; const kid = 'pk' + t.i; keys.set(kid, C.keyOf(model, t.i)); const cur = t.l.status;
       const html = '<span class="cs" title="' + esc(t.l.title) + '">Task „' + esc((t.l.title.split(/[:(]/)[0].trim().length < 15 ? t.l.title.split('(')[0].trim() : t.l.title.split(/[:(]/)[0].trim()).slice(0, 50).replace(/[\s,;]+$/, '')) + '“: ' + esc(ST_LBL[cur] || cur) + '</span>' + ['wait', 'hold', 'active', 'done'].filter(s => s !== cur).map(s => '<a class="chip" data-pst="' + s + '" data-pkey="' + kid + '" data-lkey="' + esc('lage:' + title.toLowerCase().replace(/\s+/g, ' ')) + '" data-ptitle="' + esc(t.l.title.slice(0, 80)) + '" title="' + (s === 'done' ? 'Board-Task erledigen (geht ins Archiv)' : 'Board-Task auf ' + ST_LBL[s] + ' setzen') + '">' + ST_LBL[s] + '</a>').join('')
         + (cur !== 'done' ? '<a class="chip mstar' + (isStar(t.l) ? ' on' : '') + '" data-ptstar="' + kid + '" title="' + (isStar(t.l) ? 'Nicht mehr „Braucht mich“' : 'Braucht mich: bleibt unter „Braucht dich“') + '">' + (isStar(t.l) ? '★ Braucht mich' : '☆ Braucht mich') + '</a>' : '');
-      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html); else li.insertAdjacentHTML('beforeend', ' ' + html); li.dataset.tstatus = cur; });
+      // Antworten direkt am Punkt (Chris 12.11.): Mail-Link des Tasks, Entwurf auf die neueste Mail im Verlauf
+      const tml = cur !== 'done' && !li.querySelector('[data-mrep]') ? linksOf(t.l).map(taskMailId).find(Boolean) : '';
+      const rep = tml && S.createReplyDraft ? ' <a class="chip mail" data-trep="' + esc(tml) + '" title="Antwort auf die neueste Mail im Verlauf dieses Tasks als Entwurf in Outlook (nichts wird gesendet)">↩ Antworten</a> <a class="chip mail" data-trep="' + esc(tml) + '" data-all="1" title="Allen antworten, als Entwurf in Outlook">↩ Allen</a>' : '';
+      const tc = li.querySelector('.tchips'); if (tc) tc.insertAdjacentHTML('beforeend', html + rep); else li.insertAdjacentHTML('beforeend', ' ' + html + rep); li.dataset.tstatus = cur; });
     // Filter in „Wartet auf“ wie im Reiter Tasks (Chris 29.10.): On-Hold standardmässig aus, Wartet ein
     const wl = document.querySelector('#v-heute li[data-wa]'); if (!wl) return; const ol = wl.parentElement;
     const lis = [...ol.querySelectorAll(':scope > li[data-wa]')]; const nH = lis.filter(li => li.dataset.tstatus === 'hold').length, nW = lis.filter(li => li.dataset.tstatus === 'wait').length;
