@@ -1380,7 +1380,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '0e44e88ecd';
+  const BUILD = '406f29a54e';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1400,6 +1400,7 @@ if (S.cockpit) {
     const jobs = { brief: loadBrief, cal: loadCal, mails: loadMails, links: loadLinks, jobs: loadJobs };
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     if (st.jobsGh) mergeJobs(st.jobsGh);
+    await loadWaitSent().catch(e => console.log('waitSent', e && e.message));
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
     setTimeout(() => learnSent().catch(e => console.log('learnSent', e && e.message)), 4000);   // nach jedem Laden im Hintergrund, je Mail höchstens alle 10 Min.
@@ -1508,7 +1509,17 @@ if (S.cockpit) {
   const isoPlus = n => { const x = new Date(); x.setDate(x.getDate() + n); return x.toLocaleDateString('sv-SE'); };
   const waitOf = m => { const d = st.dec['wait:' + m.internetMessageId]; return d && d.status === 'open' ? d : null; };
   const waitsOpen = () => Object.entries(st.dec).filter(([k, v]) => k.startsWith('wait:') && v && v.status === 'open').map(([k, v]) => Object.assign({ imid: k.slice(5) }, v));
-  const waitReply = w => st.mails.find(m => w.conv && m.conversationId === w.conv && m.internetMessageId !== w.imid && Date.parse(m.receivedDateTime) > Date.parse(w.at) && !/chris\.peter@bluehorizon\.com/i.test((m.from && m.from.emailAddress && m.from.emailAddress.address) || ''));
+  const waitReply0 = w => st.mails.find(m => w.conv && m.conversationId === w.conv && m.internetMessageId !== w.imid && Date.parse(m.receivedDateTime) > Date.parse(w.at) && !/chris\.peter@bluehorizon\.com/i.test((m.from && m.from.emailAddress && m.from.emailAddress.address) || ''));
+  // Kreditoren-Fall 16.11.: Hat Chris nach der Antwort selbst geantwortet (Sent Items im Thread), ist sie kein „Antwort da“ mehr (OFFEN-GATE)
+  const waitReply = w => { const rep = waitReply0(w); if (!rep) return null; const s = (st.waitSent || {})[w.conv]; return s && Date.parse(s) > Date.parse(rep.receivedDateTime) ? null : rep; };
+  async function loadWaitSent() {   // je offenem Wartet mit Antwort: neueste gesendete Mail im Thread
+    st.waitSent = st.waitSent || {};
+    for (const w of waitsOpen().filter(w => w.conv && waitReply0(w))) {
+      try { const r = await S.api("/me/mailFolders/sentitems/messages?$filter=conversationId eq '" + w.conv.replace(/'/g, "''") + "'&$select=sentDateTime&$top=50");
+        const t = (r.value || []).map(x => x.sentDateTime).filter(Boolean).sort().pop(); if (t) st.waitSent[w.conv] = t; }
+      catch (e) { console.log('waitSent', e && e.message); }
+    }
+  }
   const waitChips = w => { const rep = waitReply(w);
     return (rep ? '<a class="chip okchip" href="' + esc(rep.webLink) + '" target="outlook" rel="noopener">Antwort da ↗</a> ' : '')
       + (w.link ? '<a class="chip" href="' + esc(w.link) + '" target="outlook" rel="noopener">Mail ↗</a> ' : '')
