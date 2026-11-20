@@ -1380,7 +1380,7 @@ if (S.cockpit) {
     const m = await S.metaPath(P.register).catch(() => null); st.registerUrl = m ? m.webUrl : null;
   }
   // Veraltete Fenster (App im Dock, alter Tab) holen sich die neue Version selbst
-  const BUILD = '406f29a54e';
+  const BUILD = 'f0e0308be0';
   function buildSince() {   // Zeitpunkt, ab dem dieses Cockpit die aktuelle Version zeigt (Chris 02.11.)
     let o = null; try { o = JSON.parse(localStorage.getItem('cockpit-build-since') || 'null'); } catch (e) { o = null; }
     if (!o || o.build !== BUILD) { o = { build: BUILD, at: new Date().toISOString() }; try { localStorage.setItem('cockpit-build-since', JSON.stringify(o)); } catch (e) { /* ohne Speicher */ } }
@@ -1401,6 +1401,7 @@ if (S.cockpit) {
     await Promise.all(Object.keys(jobs).map(k => jobs[k]().catch(e => { st.err[k] = e.message; })));
     if (st.jobsGh) mergeJobs(st.jobsGh);
     await loadWaitSent().catch(e => console.log('waitSent', e && e.message));
+    await loadLageSent().catch(e => console.log('lageSent', e && e.message));
     st.loading = false; paint();
     if (ghTok()) afterGh().catch(e => console.log('afterGh', e && e.message));
     setTimeout(() => learnSent().catch(e => console.log('learnSent', e && e.message)), 4000);   // nach jedem Laden im Hintergrund, je Mail höchstens alle 10 Min.
@@ -1519,6 +1520,25 @@ if (S.cockpit) {
         const t = (r.value || []).map(x => x.sentDateTime).filter(Boolean).sort().pop(); if (t) st.waitSent[w.conv] = t; }
       catch (e) { console.log('waitSent', e && e.message); }
     }
+  }
+  // lage-check (Retro KW46, Chris 20.11.): je Lage-Punkt mit Mail die neueste gesendete Mail im Thread aus Sent Items; ist sie neuer als die neueste eingehende, gilt der Punkt als beantwortet
+  async function loadLageSent() {
+    st.lageSent = st.lageSent || {};
+    const ids = new Set(Object.values(st.triage || {}).filter(x => x && [].concat(x.brief || []).length).map(x => x.id));
+    const convs = [...new Set(st.mails.filter(m => ids.has(m.internetMessageId) && m.conversationId).map(m => m.conversationId))].slice(0, 25);
+    for (const c of convs) {
+      try { const r = await S.api("/me/mailFolders/sentitems/messages?$filter=conversationId eq '" + c.replace(/'/g, "''") + "'&$select=sentDateTime&$top=50");
+        const t = (r.value || []).map(x => x.sentDateTime).filter(Boolean).sort().pop(); if (t) st.lageSent[c] = t; }
+      catch (e) { console.log('lageSent', e && e.message); }
+    }
+  }
+  function markLageSent() {
+    document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (li.classList.contains('done')) return;
+      const ids = (li.dataset.mids || '').split('\n').filter(Boolean); if (!ids.length) return;
+      const ms = st.mails.filter(m => ids.includes(m.internetMessageId)); if (!ms.length) return;
+      const lastIn = ms.map(m => m.receivedDateTime || '').sort().pop();
+      const lastOut = ms.map(m => (st.lageSent || {})[m.conversationId] || '').sort().pop();
+      if (lastOut && lastOut > lastIn) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip" title="Gesendet ' + esc(lastOut) + ' (Sent Items, neuer als die letzte eingehende Mail)">beantwortet ' + esc(new Date(lastOut).toLocaleDateString('de-CH', { day: '2-digit', month: '2-digit' })) + '</span> '); } });
   }
   const waitChips = w => { const rep = waitReply(w);
     return (rep ? '<a class="chip okchip" href="' + esc(rep.webLink) + '" target="outlook" rel="noopener">Antwort da ↗</a> ' : '')
@@ -1651,6 +1671,7 @@ if (S.cockpit) {
           + '</span>'; }).join('') + '</div>');   // kein eigener „Neuer Chat zu dieser Mail“ in der Lage: der Punkt-Chat enthält alle Mails (Chris 10.10.)
       if (linked.length && linked.every(x => /^erledigt/i.test(x.why || '') || (st.dec['mail:' + x.id] || {}).status === 'done')) { li.classList.add('done'); li.insertAdjacentHTML('afterbegin', '<span class="donechip">erledigt</span> '); li.title = linked.map(x => x.why).join(' | '); } });
     document.querySelectorAll('#v-heute li[data-bi]').forEach(li => { if (!li.dataset.prompt) li.dataset.prompt = pointPrompt(li.textContent.trim(), []); });
+    markLageSent();
     // Board-Tasks mit Tag #wartet gehören immer in „Wartet auf“, auch wenn Buddys Lage sie auslässt (Chris 10.10.: GG fehlte)
     { const wl = document.querySelector('#v-heute li[data-wa]') ? document.querySelector('#v-heute li[data-wa]').parentElement : null;
       const have = wl ? wl.textContent.toLowerCase() : '';
@@ -1934,13 +1955,14 @@ if (S.cockpit) {
   document.addEventListener('click', e => { const b = e.target.closest && e.target.closest('[data-newmail]'); if (!b) return; e.preventDefault(); e.stopPropagation(); newMailDialog(b.dataset.subj || '', b.dataset.subj ? 'Zu: ' + b.dataset.subj : ''); }, true);
   if (S.createNewDraft && $('eMail')) { $('eMail').style.display = ''; $('eMail').onclick = () => newMailDialog($('eTitle').value.slice(0, 120), 'Zum Task: ' + $('eTitle').value.slice(0, 90)); }
   // Lage-Punkt ohne Verknüpfung: offene Mails mit den meisten gemeinsamen Stichworten (Namen, Firmen, Themen), Mindestwert 3
-  const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche chris roger notig noetig board schritt kommt deine deinen deiner deinem wartet warten antwort braucht offen gestrichen korrektur erledigt'.split(' '));   // Allerweltswörter verknüpfen sonst Falsches (Chris 23.10.: Echa-Punkt mit Canan-Mails)
+  const STOP = new Set('aber alle auch bitte dann dass diese durch einen einer eines hast heute immer kein keine mehr nach noch oder sein seit sich sind ueber unter vom von wird wurde zum zur zwischen nicht neue neuen laut morgen gestern woche chris roger notig noetig board schritt kommt deine deinen deiner deinem wartet warten antwort braucht offen gestrichen korrektur erledigt markiert review entwurf entwuerfe schriftlich naechsten nachfragen fragst bezahlt cockpit buddy retro dreaming punkt punkte tasks mails frist fristen vorschlag'.split(' '));   // + Buddy-Metawörter aus why (Cockpit-Bug 16.11.: Retro-Punkt bekam US-Taxes-Mail)   // Allerweltswörter verknüpfen sonst Falsches (Chris 23.10.: Echa-Punkt mit Canan-Mails)
   const toks = t => new Set(String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').split(/[^a-z0-9]+/).filter(w => w.length >= 5 && !STOP.has(w)));
   function guessLinks(text) {
     const lt = toks(text); if (!lt.size) return [];
     const cand = st.mails.filter(m => !mailDone(m)).map(m => { const tr = st.triage[m.internetMessageId] || {}; if (!tr.id || /^erledigt/i.test(tr.why || '')) return null;
       const mt = toks((tr.why || '') + ' ' + (m.subject || '') + ' ' + fromOf(m)); let sc = 0; lt.forEach(w => { if (mt.has(w)) sc++; }); const shared = sc;
-      if (tr.cat === 'needs') sc += 1; return sc >= 3 && shared >= 2 ? { tr, sc, t: m.receivedDateTime } : null; }).filter(Boolean);
+      const strong = toks((m.subject || '') + ' ' + fromOf(m) + ' ' + (tr.task || '') + ' ' + (tr.topic || '')); let anchor = 0; lt.forEach(w => { if (strong.has(w)) anchor++; });   // mind. ein Treffer in Betreff/Absender/Task: why allein (Buddys Text) verknüpft nicht (Cockpit-Bug 16.11.)
+      if (tr.cat === 'needs') sc += 1; return sc >= 3 && shared >= 2 && anchor >= 1 ? { tr, sc, t: m.receivedDateTime } : null; }).filter(Boolean);
     cand.sort((a, b) => b.sc - a.sc || (a.t < b.t ? 1 : -1));
     return cand.length ? cand.filter(c => c.sc >= cand[0].sc - 1).slice(0, 2).map(c => c.tr) : [];
   }
